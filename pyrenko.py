@@ -56,7 +56,7 @@ class renko:
         if len(prices) > 0:
             # Init by start values
             self.source_prices = prices
-            self.renko_prices.append(prices.iloc[0])
+            self.renko_prices.append(prices[0])
             self.renko_directions.append(0)
 
             # For each price in history

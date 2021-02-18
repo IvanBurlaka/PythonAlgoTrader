@@ -15,4 +15,4 @@ def get_close_prices_and_times(traiding_pair, date_from, date_to, interval):
     print("Finished: History size = " + str(len(bars)))
     prices = [float(bar[4]) for bar in bars]
     times = [float(bar[0]) for bar in bars]
-    return pd.DataFrame(prices)
+    return prices
