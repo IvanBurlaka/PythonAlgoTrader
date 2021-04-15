@@ -14,9 +14,12 @@ class renko:
         self.current_capital=1000
         self.tf_strat_divider=5
 
+        # sma params
+        self.profit_sma = []
+
+        # trend following params
         self.position_data = { "trade_direction": "", "prices_opened": [] }
         self.profit = []
-
 
     # Setting brick size. Auto mode is preferred, it uses history
     def set_brick_size(self, HLC_history=None, auto=True, brick_size=10.0):
@@ -47,6 +50,7 @@ class renko:
                     #calculate profit
                     percentage_profit = (self.open_short_price - renko_price)/self.open_short_price
                     self.current_capital += percentage_profit*self.current_capital
+                    self.profit_sma.append(percentage_profit*self.current_capital)
                     self.open_short_price = False
                 #open long
                 self.open_long_price = renko_price
@@ -57,6 +61,7 @@ class renko:
                     #calculate profit
                     percentage_profit = (renko_price - self.open_long_price)/self.open_long_price
                     self.current_capital += percentage_profit*self.current_capital
+                    self.profit_sma.append(percentage_profit*self.current_capital)
                     self.open_long_price = False
                 #open short
                 self.open_short_price = renko_price
@@ -67,7 +72,7 @@ class renko:
         if self.renko_directions[-1] !=0 and self.renko_directions[-2] == self.renko_directions[-1]:
             #direction matches previous, then open position in following direction
             if not self.position_data["trade_direction"]:
-                if self.renko_directions[-1]:
+                if self.renko_directions[-1] == 1:
                     position_side = "long"
                 else:
                     position_side = "short"
@@ -76,12 +81,13 @@ class renko:
         else:
             #position direction has changed, close open order and calculate capital
             profit = 0
-            for price in self.position_data["prices_opened"][:6]:
+            position_divider = 6
+            for price in self.position_data["prices_opened"][:position_divider]:
                 if self.position_data["trade_direction"] == 'long':
-                    profit += renko_price*(self.current_capital/6) - price*(self.current_capital/6)
+                    profit += renko_price/price*(self.current_capital/position_divider) - self.current_capital/position_divider
                 else:
-                    profit += price*(self.current_capital/6) - renko_price*(self.current_capital/6)
-            self.profit.append(profit)
+                    profit += price/renko_price*(self.current_capital/position_divider) - self.current_capital/position_divider
+            self.profit.append([profit, self.position_data["trade_direction"], self.current_capital])
             self.current_capital += profit
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
@@ -117,7 +123,7 @@ class renko:
                 for d in range(start_brick, np.abs(gap_div)):
                     self.renko_prices.append(self.renko_prices[-1] + self.brick_size * np.sign(gap_div))
                     self.renko_directions.append(np.sign(gap_div))
-                self.__sma_strategy()
+                self.__trend_following_strategy()
 
         return num_new_bars
 

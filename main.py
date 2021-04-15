@@ -24,5 +24,5 @@ if __name__ == '__main__':
     print('Renko bar sma: ', renko_obj.get_sma())
     print('Balance: ', renko_obj.get_balance())
 
-    # if len(renko_obj.get_renko_prices()) > 1:
-    #     renko_obj.plot_renko()
+    if len(renko_obj.get_renko_prices()) > 1:
+        renko_obj.plot_renko()
