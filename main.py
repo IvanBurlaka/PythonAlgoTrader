@@ -16,11 +16,13 @@ if __name__ == '__main__':
 
     renko_obj = pyrenko.renko()
 
-    print('Set brick size (manual mode): ', renko_obj.set_brick_size(auto=False, brick_size=0.01))
-    renko_obj.build_history(prices=close_prices)
+    print('Set brick size (manual mode): ', renko_obj.set_brick_size(auto=True, HLC_history=close_prices.iloc[:,[2,3,4]]))
+    renko_obj.build_history(prices=close_prices.iloc[:, 4])
     print('Renko bar prices: ', renko_obj.get_renko_prices())
     print('Renko bar directions: ', renko_obj.get_renko_directions())
     print('Renko bar evaluation: ', renko_obj.evaluate())
+    print('Renko bar sma: ', renko_obj.get_sma())
+    print('Balance: ', renko_obj.get_balance())
 
-    if len(renko_obj.get_renko_prices()) > 1:
-        renko_obj.plot_renko()
+    # if len(renko_obj.get_renko_prices()) > 1:
+    #     renko_obj.plot_renko()
