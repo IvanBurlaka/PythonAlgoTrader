@@ -21,7 +21,6 @@ if __name__ == '__main__':
     print('Renko bar prices: ', renko_obj.get_renko_prices())
     print('Renko bar directions: ', renko_obj.get_renko_directions())
     print('Renko bar evaluation: ', renko_obj.evaluate())
-    print('Renko bar sma: ', renko_obj.get_sma())
     print('Balance: ', renko_obj.get_balance())
 
     if len(renko_obj.get_renko_prices()) > 1:
