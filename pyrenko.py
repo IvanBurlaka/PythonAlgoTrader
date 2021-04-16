@@ -198,7 +198,7 @@ class renko:
         return self.sma
 
     def get_balance(self):
-        return self.current_capital, self.profit
+        return self.current_capital
 
     def get_renko_directions(self):
         return self.renko_directions
