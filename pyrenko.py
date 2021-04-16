@@ -24,7 +24,7 @@ class renko:
     # Setting brick size. Auto mode is preferred, it uses history
     def set_brick_size(self, HLC_history=None, auto=True, brick_size=10.0):
         if auto == True:
-            self.brick_size = self.__get_optimal_brick_size(HLC_history.iloc[:, [0, 1, 2]])
+            self.brick_size = self.__get_optimal_brick_size(HLC_history)
         else:
             self.brick_size = brick_size
         return self.brick_size
