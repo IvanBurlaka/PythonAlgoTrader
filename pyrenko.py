@@ -81,13 +81,12 @@ class renko:
         else:
             #position direction has changed, close open order and calculate capital
             profit = 0
-            position_divider = 6
+            position_divider = 3
             for price in self.position_data["prices_opened"][:position_divider]:
                 if self.position_data["trade_direction"] == 'long':
                     profit += renko_price/price*(self.current_capital/position_divider) - self.current_capital/position_divider
                 else:
                     profit += price/renko_price*(self.current_capital/position_divider) - self.current_capital/position_divider
-            self.profit.append([profit, self.position_data["trade_direction"], self.current_capital])
             self.current_capital += profit
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
