@@ -1,6 +1,9 @@
 import pyrenko
 from utils import *
 import argparse
+import talib
+import numpy as np
+import scipy.optimize as opt
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
@@ -14,9 +17,31 @@ if __name__ == '__main__':
 
     close_prices = get_close_prices_and_times(args.trading_pair, args.date_from, args.date_to, args.interval)
 
+    # Function for optimization
+    def evaluate_renko(brick, history, column_name):
+        renko_obj = pyrenko.renko()
+        renko_obj.set_brick_size(brick_size=brick, auto=False)
+        renko_obj.build_history(prices=history)
+        return renko_obj.evaluate()[column_name]
+
+
+    # Get ATR values (it needs to get boundaries)
+    # Drop NaNs
+    atr = talib.ATR(high=np.double(close_prices.iloc[:, 2]),
+                    low=np.double(close_prices.iloc[:, 3]),
+                    close=np.double(close_prices.iloc[:, 4]),
+                    timeperiod=14)
+    atr = atr[np.isnan(atr) == False]
+
+    # Get optimal brick size as maximum of score function by Brent's (or similar) method
+    # First and Last ATR values are used as the boundaries
+    optimal_brick_sfo = opt.fminbound(lambda x: -evaluate_renko(brick=x,
+                                                                history=close_prices.iloc[:, 4], column_name='score'),
+                                      np.min(atr), np.max(atr), disp=0)
+
     renko_obj = pyrenko.renko()
 
-    print('Set brick size (manual mode): ', renko_obj.set_brick_size(auto=True, HLC_history=close_prices.iloc[:,[2,3,4]]))
+    print('Set brick size (manual mode): ', renko_obj.set_brick_size(auto=False, brick_size=optimal_brick_sfo))
     renko_obj.build_history(prices=close_prices.iloc[:, 4])
     print('Renko bar prices: ', renko_obj.get_renko_prices())
     print('Renko bar directions: ', renko_obj.get_renko_directions())

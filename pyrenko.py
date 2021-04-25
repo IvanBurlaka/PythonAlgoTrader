@@ -8,18 +8,12 @@ class renko:
         self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
-        self.sma = []
-        self.open_long_price = False  
-        self.open_short_price = False 
         self.current_capital=1000
-        self.tf_strat_divider=5
-
-        # sma params
-        self.profit_sma = []
 
         # trend following params
         self.position_data = { "trade_direction": "", "prices_opened": [] }
         self.profit = []
+        self.capital_history = []
 
     # Setting brick size. Auto mode is preferred, it uses history
     def set_brick_size(self, HLC_history=None, auto=True, brick_size=10.0):
@@ -28,43 +22,6 @@ class renko:
         else:
             self.brick_size = brick_size
         return self.brick_size
-
-    def __sma_strategy(self,):
-        N = 10
-        smalist = self.renko_prices[-N:]
-        if len(smalist) < N:
-            self.sma.append(0)
-            return
-        else:
-            self.sma.append(sum(smalist) / len(smalist))
-
-        renko_price = self.renko_prices[-1]
-        sma_value = self.sma[-1]
-        prev_sma_value = self.sma[-2]
-
-        if sma_value and prev_sma_value:
-            #sma crosses down --> up
-            if (prev_sma_value < renko_price and sma_value > renko_price):
-                #close short
-                if self.open_short_price:
-                    #calculate profit
-                    percentage_profit = (self.open_short_price - renko_price)/self.open_short_price
-                    self.current_capital += percentage_profit*self.current_capital
-                    self.profit_sma.append(percentage_profit*self.current_capital)
-                    self.open_short_price = False
-                #open long
-                self.open_long_price = renko_price
-            #sma crosses up --> down
-            if (prev_sma_value > renko_price and sma_value < renko_price):
-                #close long
-                if self.open_long_price:
-                    #calculate profit
-                    percentage_profit = (renko_price - self.open_long_price)/self.open_long_price
-                    self.current_capital += percentage_profit*self.current_capital
-                    self.profit_sma.append(percentage_profit*self.current_capital)
-                    self.open_long_price = False
-                #open short
-                self.open_short_price = renko_price
 
     def __trend_following_strategy(self):
         renko_price = self.renko_prices[-1]
@@ -84,10 +41,11 @@ class renko:
             position_divider = 3
             for price in self.position_data["prices_opened"][:position_divider]:
                 if self.position_data["trade_direction"] == 'long':
-                    profit += renko_price/price*(self.current_capital/position_divider) - self.current_capital/position_divider
+                    profit += renko_price/price*(self.current_capital/position_divider) - self.current_capital/position_divider*1.0002
                 else:
-                    profit += price/renko_price*(self.current_capital/position_divider) - self.current_capital/position_divider
+                    profit += price/renko_price*(self.current_capital/position_divider) - self.current_capital/position_divider*1.0002
             self.current_capital += profit
+            self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
 
@@ -163,6 +121,8 @@ class renko:
                                              low=np.double(HLC_history.iloc[:, 1]),
                                              close=np.double(HLC_history.iloc[:, 2]),
                                              timeperiod=atr_timeperiod)[atr_timeperiod:])
+            self.atr=talib.ATR(high=np.double(HLC_history.iloc[:, 0]), low=np.double(HLC_history.iloc[:, 1]),close=np.double(HLC_history.iloc[:, 2]),timeperiod=atr_timeperiod)[atr_timeperiod:]
+            
 
         return brick_size
 
@@ -198,7 +158,7 @@ class renko:
         return self.sma
 
     def get_balance(self):
-        return self.current_capital
+        return self.current_capital, 1000 - min(self.capital_history), self.brick_size
 
     def get_renko_directions(self):
         return self.renko_directions
