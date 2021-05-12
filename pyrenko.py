@@ -20,31 +20,32 @@ class renko:
         self.profit = []
         self.capital_history = []
         self.close_price = pd.DataFrame(read_close_prices_and_times())
+        self.trailing_history_window = 10080 #in minutes
 
     def get_close_price(self):
         return self.close_price
 
-    def calculate_optimal_brick_size(self):
+    def calculate_optimal_brick_size(self, current_candle):
         # Function for optimization
         def evaluate_renko(brick, history, column_name):
             self.set_brick_size(brick_size=brick, auto=False)
             self.build_history()
-            return self.evaluate()[column_name]
+            return self.evaluate(testEvaluation=True)[column_name]
 
         close_prices = self.get_close_price()
 
         # Get ATR values (it needs to get boundaries)
         # Drop NaNs
-        atr = talib.ATR(high=np.double(close_prices.iloc[:, 2]),
-                        low=np.double(close_prices.iloc[:, 3]),
-                        close=np.double(close_prices.iloc[:, 4]),
+        atr = talib.ATR(high=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 2]),
+                        low=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 3]),
+                        close=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 4]),
                         timeperiod=14)
         atr = atr[np.isnan(atr) == False]
 
         # Get optimal brick size as maximum of score function by Brent's (or similar) method
         # First and Last ATR values are used as the boundaries
         return opt.fminbound(lambda x: -evaluate_renko(brick=x,
-                                                       history=close_prices.iloc[:, 4],
+                                                       history=close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 4],
                                                        column_name='score'),
                              np.min(atr),
                              np.max(atr),
@@ -55,12 +56,12 @@ class renko:
         if auto == True:
             # test = self.get_close_price().iloc[:, [2, 3, 4]]
             # self.brick_size = self.__get_optimal_brick_size(HLC_history=test)
-            self.brick_size = self.calculate_optimal_brick_size()
+            self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window)
         else:
             self.brick_size = brick_size
         return self.brick_size
 
-    def __trend_following_strategy(self):
+    def __trend_following_strategy(self, candle_index):
         renko_price = self.renko_prices[-1]
         prev_renko_price = self.renko_prices[-2]
         if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1]:
@@ -89,10 +90,9 @@ class renko:
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
+            # recalculate brick size
 
-            # self.set_brick_size(auto=True)
-
-    def __renko_rule(self, last_price):
+    def __renko_rule(self, last_price, candle_index):
         # Get the gap between two prices
         gap_div = int(
             float(last_price - self.renko_prices[-1]) / self.brick_size)
@@ -126,14 +126,14 @@ class renko:
                     self.renko_prices.append(
                         self.renko_prices[-1] + self.brick_size * np.sign(gap_div))
                     self.renko_directions.append(np.sign(gap_div))
-                self.__trend_following_strategy()
+                self.__trend_following_strategy(candle_index)
 
         return num_new_bars
 
     # Getting renko on history
     def build_history(self):
         close_prices = self.get_close_price()
-        prices = close_prices.iloc[:, 4]
+        prices = close_prices.iloc[self.trailing_history_window:, 4]
 
         if len(prices) > 0:
             # Init by start values
@@ -144,8 +144,8 @@ class renko:
             print(self.renko_prices)
 
             # For each price in history
-            for p in self.source_prices[1:]:
-                self.__renko_rule(float(p))
+            for index, p in enumerate(self.source_prices[1:]):
+                self.__renko_rule(float(p), index)
 
         return len(self.renko_prices)
 
@@ -177,7 +177,7 @@ class renko:
 
         return brick_size
 
-    def evaluate(self, method='simple'):
+    def evaluate(self, method='simple', testEvaluation=False):
         balance = 0
         sign_changes = 0
         price_ratio = len(self.source_prices) / len(self.renko_prices)
@@ -198,7 +198,10 @@ class renko:
                 score = np.log(score + 1) * np.log(price_ratio)
             else:
                 score = -1.0
-
+            if testEvaluation:
+                self.current_capital = 1000
+                self.renko_prices = []
+                self.renko_directions = []
             return {'balance': balance, 'sign_changes:': sign_changes,
                     'price_ratio': price_ratio, 'score': score}
 
