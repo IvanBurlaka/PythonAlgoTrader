@@ -13,6 +13,8 @@ class renko:
         self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
+        self.renko_prices_for_calculation = []
+        self.renko_directions_for_calculation = []
         self.current_capital = 1000
 
         # trend following params
@@ -20,17 +22,20 @@ class renko:
         self.profit = []
         self.capital_history = []
         self.close_price = pd.DataFrame(read_close_prices_and_times())
-        self.trailing_history_window = 10080 #in minutes
+        self.trailing_history_window = int(10080/2) #in minutes
+        self.min_recalculation_period = 1440
+        self.last_recalculation_index = 0
 
     def get_close_price(self):
         return self.close_price
 
     def calculate_optimal_brick_size(self, current_candle):
+        self.last_recalculation_index = current_candle
         # Function for optimization
         def evaluate_renko(brick, history, column_name):
             self.set_brick_size(brick_size=brick, auto=False)
-            self.build_history()
-            return self.evaluate(testEvaluation=True)[column_name]
+            self.build_history_for_calculation(history)
+            return self.evaluate_for_calculation(history)[column_name]
 
         close_prices = self.get_close_price()
 
@@ -91,6 +96,9 @@ class renko:
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
             # recalculate brick size
+            if candle_index - self.last_recalculation_index > self.min_recalculation_period:
+                self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window+candle_index)
+
 
     def __renko_rule(self, last_price, candle_index):
         # Get the gap between two prices
@@ -129,6 +137,59 @@ class renko:
                 self.__trend_following_strategy(candle_index)
 
         return num_new_bars
+
+    def __renko_rule_for_calculation(self, last_price, candle_index):
+        # Get the gap between two prices
+        gap_div = int(
+            float(last_price - self.renko_prices_for_calculation[-1]) / self.brick_size)
+        is_new_brick = False
+        start_brick = 0
+        num_new_bars = 0
+
+        # When we have some gap in prices
+        if gap_div != 0:
+            # Forward any direction (up or down)
+            if (gap_div > 0 and (self.renko_directions_for_calculation[-1] > 0 or self.renko_directions_for_calculation[-1] == 0)) or (
+                    gap_div < 0 and (self.renko_directions_for_calculation[-1] < 0 or self.renko_directions_for_calculation[-1] == 0)):
+                num_new_bars = gap_div
+                is_new_brick = True
+                start_brick = 0
+            # Backward direction (up -> down or down -> up)
+            elif np.abs(gap_div) >= 2:  # Should be double gap at least
+                num_new_bars = gap_div
+                num_new_bars -= np.sign(gap_div)
+                start_brick = 2
+                is_new_brick = True
+                self.renko_prices_for_calculation.append(
+                    self.renko_prices_for_calculation[-1] + 2 * self.brick_size * np.sign(gap_div))
+                self.renko_directions_for_calculation.append(np.sign(gap_div))
+            # else:
+            # num_new_bars = 0
+
+            if is_new_brick:
+                # Add each brick
+                for d in range(start_brick, np.abs(gap_div)):
+                    self.renko_prices_for_calculation.append(
+                        self.renko_prices_for_calculation[-1] + self.brick_size * np.sign(gap_div))
+                    self.renko_directions_for_calculation.append(np.sign(gap_div))
+
+        return num_new_bars
+
+    # Getting renko on history
+    def build_history_for_calculation(self, history):
+
+        if len(history) > 0:
+            # Init by start values
+            self.renko_prices_for_calculation.append(float(history.iloc[0]))
+            self.renko_directions_for_calculation.append(0)
+
+            print(self.renko_prices)
+
+            # For each price in history
+            for index, p in enumerate(history[1:]):
+                self.__renko_rule_for_calculation(float(p), index)
+
+        return len(self.renko_prices)
 
     # Getting renko on history
     def build_history(self):
@@ -177,7 +238,33 @@ class renko:
 
         return brick_size
 
-    def evaluate(self, method='simple', testEvaluation=False):
+    def evaluate_for_calculation(self, history, method='simple'):
+        balance = 0
+        sign_changes = 0
+        price_ratio = len(history) / len(self.renko_prices_for_calculation)
+
+        if method == 'simple':
+            for i in range(2, len(self.renko_directions_for_calculation)):
+                if self.renko_directions_for_calculation[i] == self.renko_directions_for_calculation[i - 1]:
+                    balance = balance + 1
+                else:
+                    balance = balance - 2
+                    sign_changes = sign_changes + 1
+
+            if sign_changes == 0:
+                sign_changes = 1
+
+            score = balance / sign_changes
+            if score >= 0 and price_ratio >= 1:
+                score = np.log(score + 1) * np.log(price_ratio)
+            else:
+                score = -1.0
+            self.renko_prices_for_calculation = []
+            self.renko_directions_for_calculation = []
+            return {'balance': balance, 'sign_changes:': sign_changes,
+                    'price_ratio': price_ratio, 'score': score}
+
+    def evaluate(self, method='simple'):
         balance = 0
         sign_changes = 0
         price_ratio = len(self.source_prices) / len(self.renko_prices)
@@ -198,10 +285,6 @@ class renko:
                 score = np.log(score + 1) * np.log(price_ratio)
             else:
                 score = -1.0
-            if testEvaluation:
-                self.current_capital = 1000
-                self.renko_prices = []
-                self.renko_directions = []
             return {'balance': balance, 'sign_changes:': sign_changes,
                     'price_ratio': price_ratio, 'score': score}
 
