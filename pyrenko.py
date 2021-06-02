@@ -9,7 +9,7 @@ import pandas as pd
 
 
 class renko:
-    def __init__(self):
+    def __init__(self, prices_file, trailing_history_window, min_recalculation_period):
         self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
@@ -21,9 +21,9 @@ class renko:
         self.position_data = {"trade_direction": "", "prices_opened": []}
         self.profit = []
         self.capital_history = []
-        self.close_price = pd.DataFrame(read_close_prices_and_times())
-        self.trailing_history_window = int(10080/2) #in minutes
-        self.min_recalculation_period = 1440
+        self.close_price = pd.DataFrame(read_close_prices_and_times(prices_file))
+        self.trailing_history_window = trailing_history_window
+        self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
 
     def get_close_price(self):
@@ -91,6 +91,7 @@ class renko:
                     profit += price/renko_price * \
                         (self.current_capital/position_divider) - \
                         self.current_capital/position_divider*1.0002
+            
             self.current_capital += profit
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
@@ -183,7 +184,7 @@ class renko:
             self.renko_prices_for_calculation.append(float(history.iloc[0]))
             self.renko_directions_for_calculation.append(0)
 
-            print(self.renko_prices)
+            # print(self.renko_prices)
 
             # For each price in history
             for index, p in enumerate(history[1:]):
@@ -202,7 +203,7 @@ class renko:
             self.renko_prices.append(float(prices.iloc[0]))
             self.renko_directions.append(0)
 
-            print(self.renko_prices)
+            # print(self.renko_prices)
 
             # For each price in history
             for index, p in enumerate(self.source_prices[1:]):
@@ -295,6 +296,7 @@ class renko:
         return self.sma
 
     def get_balance(self):
+        # print(self.close_price)
         return self.current_capital, 1000 - min(self.capital_history), self.brick_size
 
     def get_renko_directions(self):

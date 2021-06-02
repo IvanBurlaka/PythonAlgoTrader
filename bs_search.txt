@@ -1,0 +1,100 @@
+window search:
+
+    sol:
+        window: 2.0     balance: 7521520.932268291
+        window: 1.0     balance: 5681648.954900455
+        window: 3.0     balance: 3335696.1234119423
+        window: 7.0     balance: 3219357.145450034
+        window: 18.0    balance: 2627940.937150858
+        window: 14.0    balance: 2567255.3880778076
+        window: 11.0    balance: 2281960.2276087436
+        window: 4.0     balance: 2113568.4663016074
+        window: 5.0     balance: 1752821.143595479
+        window: 17.0    balance: 1730120.738702212
+        window: 12.0    balance: 1550210.4775417214
+        window: 6.0     balance: 1502540.1774074666
+        window: 21.0    balance: 1476173.1407274504
+        window: 22.0    balance: 1181386.6141094868
+        window: 19.0    balance: 1068521.1035473736
+        window: 23.0    balance: 971317.0779226122
+        window: 8.0     balance: 921675.7933962934
+        window: 9.0     balance: 892465.6443730602
+        window: 20.0    balance: 859610.6493889114
+        window: 13.0    balance: 802516.5788908156
+        window: 10.0    balance: 742638.2173929275
+        window: 16.0    balance: 688839.1560221873
+        window: 28.0    balance: 682153.8428966594
+        window: 15.0    balance: 670245.1651609911
+        window: 29.0    balance: 481939.21255320415
+        window: 24.0    balance: 416667.3784573979
+        window: 26.0    balance: 387869.8469338031
+        window: 27.0    balance: 374116.2995775947
+        window: 25.0    balance: 203357.26398665807
+
+    uni:
+        window: 1.0     balance: 463134.18332491623
+        window: 3.0     balance: 450291.07980462344
+        window: 4.0     balance: 132413.0023478389
+        window: 21.0    balance: 100102.14484702333
+        window: 6.0     balance: 82359.79767698754
+        window: 22.0    balance: 58133.11647218236
+        window: 2.0     balance: 48961.49703584988
+        window: 12.0    balance: 47829.18935920368
+        window: 9.0     balance: 47783.70531928896
+        window: 10.0    balance: 46085.37400092077
+        window: 5.0     balance: 44145.83824117641
+        window: 15.0    balance: 40869.170200389315
+        window: 24.0    balance: 37160.73245381378
+        window: 16.0    balance: 30209.58562978763
+        window: 18.0    balance: 27209.2293967273
+        window: 7.0     balance: 25817.0895344969
+        window: 20.0    balance: 24531.908672141442
+        window: 8.0     balance: 24430.826848953737
+        window: 13.0    balance: 23786.67018706365
+        window: 14.0    balance: 23451.504482862823
+        window: 19.0    balance: 20431.611365402343
+        window: 11.0    balance: 16430.287907467
+        window: 26.0    balance: 16180.994217268395
+        window: 29.0    balance: 15007.842347983136
+        window: 23.0    balance: 14785.426593851575
+        window: 17.0    balance: 13310.714139187647
+        window: 25.0    balance: 12314.032386236066
+        window: 28.0    balance: 10260.972846242794
+        window: 27.0    balance: 9213.566372625983
+
+
+
+
+min_recalc search (window=3) (period in days)
+
+    sol:
+        period: 6.041666666666667       balance: 20169045.48947993
+        period: 4.041666666666667       balance: 10691451.392494243
+        period: 1.0416666666666667      balance: 8773872.19606849
+        period: 2.5416666666666665      balance: 8186374.897642646
+        period: 0.5416666666666666      balance: 8108599.397366978
+        period: 0.041666666666666664    balance: 7693593.978159592
+        period: 1.5416666666666667      balance: 5561389.100169808
+        period: 6.541666666666667       balance: 4105660.030904811
+        period: 3.0416666666666665      balance: 3227892.93616788
+        period: 5.041666666666667       balance: 2506431.80203057
+        period: 4.541666666666667       balance: 2330798.023995656
+        period: 3.5416666666666665      balance: 2329583.0609581354
+        period: 2.0416666666666665      balance: 1743899.837654544
+        period: 5.541666666666667       balance: 1495385.2588817254
+    
+    uni:
+        period: 3.0416666666666665      balance: 690462.7573919197
+        period: 6.541666666666667       balance: 679825.7770690568
+        period: 4.041666666666667       balance: 354234.863974186
+        period: 6.041666666666667       balance: 293546.27061761136
+        period: 0.041666666666666664    balance: 223093.63138200404
+        period: 5.541666666666667       balance: 210745.02996023
+        period: 1.5416666666666667      balance: 163767.26711497037
+        period: 3.5416666666666665      balance: 163447.06444906586
+        period: 2.5416666666666665      balance: 155978.9321726152
+        period: 5.041666666666667       balance: 148676.87154914613
+        period: 2.0416666666666665      balance: 132083.5383632317
+        period: 0.5416666666666666      balance: 115209.39775650327
+        period: 4.541666666666667       balance: 53189.955904664814
+        period: 1.0416666666666667      balance: 39432.684843376366

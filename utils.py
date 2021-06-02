@@ -30,8 +30,8 @@ def write_close_prices_and_times(trading_pair, date_from, date_to, interval):
         pickle.dump(close_prices_list, f)
 
 
-def read_close_prices_and_times():
-    with open('prices.dump', 'rb') as f:
+def read_close_prices_and_times(file):
+    with open(file, 'rb') as f:
         data = pickle.load(f)
 
     return data
