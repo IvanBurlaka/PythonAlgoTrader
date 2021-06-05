@@ -25,7 +25,7 @@ day = 24*hour
 week = 7*day
 
 trailing_history_window = 3*day
-min_recalculation_period = 5 #6*day
+min_recalculation_period = 6*day
 
 def now():
       return int(time.time())

@@ -121,6 +121,7 @@ class renko:
                              np.max(atr),
                              disp=0)
         log.info(f'calculated optimal brick size: {result}')
+        self.candles_since_recalculation = 0
         return result
 
     # Setting brick size. Auto mode is preferred, it uses history
@@ -192,6 +193,7 @@ class renko:
 
     def on_new_candle(self, candle):
         # convert ftx candle to binance candle bc close_price is binance format
+        self.candles_since_recalculation += 1
         self.close_price = self.close_price.append([[
             candle['time'],
             candle['open'],
@@ -210,13 +212,14 @@ class renko:
 
     def __renko_rule(self, last_price):
         log.info(f'running renko rule on last price: {last_price}')
-        self.candles_since_recalculation += 1
         # Get the gap between two prices
         gap_div = int(
             float(last_price - self.renko_prices[-1]) / self.brick_size)
         is_new_brick = False
         start_brick = 0
         num_new_bars = 0
+
+        print(f'gap div={gap_div}')
 
         # When we have some gap in prices
         if gap_div != 0:
