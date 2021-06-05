@@ -1,35 +1,60 @@
-from ftx import FtxClient
+import ftx
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import talib
+import logging
 
 import scipy.optimize as opt
 from utils import *
 import pandas as pd
 
 
+log = logging.getLogger(__package__)
+
+
 def get_initial_history(market, minutes):
-      from datetime import date, timedelta
-      
-      market = market.replace('-PERP', 'USDT')
-      days = int(minutes/24/60)+1
-      today = date.today()
+    # from binance, bc ftx stupid no has data
+    from datetime import date, timedelta
 
-      start = (today - timedelta(days)).strftime("%Y/%m/%d")
-      end = (today + timedelta(days=1)).strftime("%Y/%m/%d")
+    market = market.replace('-PERP', 'USDT')
+    days = int(minutes/24/60)+1
+    today = date.today()
 
-      print(f'history start: {start}')
-      print(f'history end: {end}')
+    start = (today - timedelta(days)).strftime("%Y/%m/%d")
+    end = (today + timedelta(days=1)).strftime("%Y/%m/%d")
 
-      history = get_close_prices_and_times(market, start, end, '1m')
-      print(f'history length: {len(history)}')
+    log.info(f'history start: {start}')
+    log.info(f'history end: {end}')
 
-      return history
+    history = get_close_prices_and_times(market, start, end, '1m')
+    log.info(f'history length: {len(history)}')
+    log.info(f'last candle in history: {history[-1]}')
+
+    return history
+
+
+# def get_initial_history(ftx, minutes):
+#       def parse_time(t):
+#             return parse_datetime(t).timestamp()
+
+#       result = ftx.get_historical_prices(market, '60', now()-(minutes+1)*60)
+
+#       while True:
+#             print(result[-1]["startTime"])
+#             last_time = parse_time(result[-1]["startTime"])
+#             candles = ftx.get_historical_prices(market, '60', last_time)
+#             candles = [c for c in candles if parse_time(c["startTime"]) > last_time]
+#             result.extend(candles)
+#             print(f'adding {len(candles)} candles')
+#             if not candles:
+#                   break
+
+#       return result[:-1]
 
 
 class renko:
-    def __init__(self, ftx: FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
+    def __init__(self, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
         self.market = market
 
         self.ftx = ftx
@@ -40,6 +65,7 @@ class renko:
         self.renko_directions_for_calculation = []
         #self.current_capital = 1000
         self.current_capital = self.get_usd_balance()
+        log.info(f'initial balance: {self.current_capital}')
         
         # trend following params
         self.position_data = {"trade_direction": "", "prices_opened": []}
@@ -51,6 +77,18 @@ class renko:
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
 
+        self.candles_since_recalculation = 0
+
+        self.set_brick_size(auto=True)
+
+        prices = self.close_price.iloc[self.trailing_history_window:, 4]
+
+        if len(prices) > 0:
+            # Init by start values
+            self.source_prices = prices
+            self.renko_prices.append(float(prices.iloc[0]))
+            self.renko_directions.append(0)
+
     def get_usd_balance(self) -> float:
         balances = self.ftx.get_balances()
         for b in balances:
@@ -58,8 +96,8 @@ class renko:
                 return b['free']
         return 0
 
-    def calculate_optimal_brick_size(self, current_candle):
-        self.last_recalculation_index = current_candle
+    def calculate_optimal_brick_size(self):
+        # self.last_recalculation_index = current_candle
         # Function for optimization
         def evaluate_renko(brick, history, column_name):
             self.set_brick_size(brick_size=brick, auto=False)
@@ -68,68 +106,111 @@ class renko:
 
         # Get ATR values (it needs to get boundaries)
         # Drop NaNs
-        atr = talib.ATR(high=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 2]),
-                        low=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 3]),
-                        close=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 4]),
+        atr = talib.ATR(high=np.double(self.close_price.iloc[-self.trailing_history_window:, 2]),
+                        low=np.double(self.close_price.iloc[-self.trailing_history_window:, 3]),
+                        close=np.double(self.close_price.iloc[-self.trailing_history_window:, 4]),
                         timeperiod=14)
         atr = atr[np.isnan(atr) == False]
 
         # Get optimal brick size as maximum of score function by Brent's (or similar) method
         # First and Last ATR values are used as the boundaries
-        return opt.fminbound(lambda x: -evaluate_renko(brick=x,
-                                                       history=self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 4],
+        result = opt.fminbound(lambda x: -evaluate_renko(brick=x,
+                                                       history=self.close_price.iloc[-self.trailing_history_window:, 4],
                                                        column_name='score'),
                              np.min(atr),
                              np.max(atr),
                              disp=0)
+        log.info(f'calculated optimal brick size: {result}')
+        return result
 
     # Setting brick size. Auto mode is preferred, it uses history
     def set_brick_size(self, HLC_history=None, auto=True, brick_size=10.0):
         if auto == True:
             # test = self.get_close_price().iloc[:, [2, 3, 4]]
             # self.brick_size = self.__get_optimal_brick_size(HLC_history=test)
-            self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window)
+            self.brick_size = self.calculate_optimal_brick_size()
         else:
             self.brick_size = brick_size
         return self.brick_size
 
-    def __trend_following_strategy(self, candle_index):
+    def __trend_following_strategy(self):
         renko_price = self.renko_prices[-1]
-        prev_renko_price = self.renko_prices[-2]
         if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1]:
             # direction matches previous, then open position in following direction
             if not self.position_data["trade_direction"]:
+                size = self.current_capital/renko_price
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
+                    log.info(f'long: price={renko_price} size={size}')
+                    # self.ftx.place_order(
+                    #         market=self.market,
+                    #         side=ftx.buy,
+                    #         price=renko_price,
+                    #         size=size,
+                    #         type=ftx.limit,
+                    # )
                 else:
                     position_side = "short"
+                    log.info(f'short: price={renko_price} size={size}')
+                    # self.ftx.place_order(
+                    #         market=self.market,
+                    #         side=ftx.sell,
+                    #         price=renko_price,
+                    #         size=size,
+                    #         type=ftx.limit,
+                    # )
                 self.position_data["trade_direction"] = position_side
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
-            profit = 0
-            position_divider = 3
-            for price in self.position_data["prices_opened"][:position_divider]:
-                if self.position_data["trade_direction"] == 'long':
-                    profit += renko_price/price * \
-                        (self.current_capital/position_divider) - \
-                        self.current_capital/position_divider*1.0002
-                else:
-                    profit += price/renko_price * \
-                        (self.current_capital/position_divider) - \
-                        self.current_capital/position_divider*1.0002
+            log.info('canceling orders, closing positions, price={renko_price}')
+            # self.ftx.cancel_orders(market=self.market)
+            # self.ftx.close_positions(self.market)
+
+            # profit = 0
+            # position_divider = 3
+            # for price in self.position_data["prices_opened"][:position_divider]:
+            #     if self.position_data["trade_direction"] == 'long':
+            #         profit += renko_price/price * \
+            #             (self.current_capital/position_divider) - \
+            #             self.current_capital/position_divider*1.0002
+            #     else:
+            #         profit += price/renko_price * \
+            #             (self.current_capital/position_divider) - \
+            #             self.current_capital/position_divider*1.0002
             
-            self.current_capital += profit
+            # self.current_capital += profit
             self.current_capital = self.get_usd_balance()
+            log.info(f'updated balance: {self.current_capital}')
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
             # recalculate brick size
-            if candle_index - self.last_recalculation_index > self.min_recalculation_period:
-                self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window+candle_index)
+            #if candle_index - self.last_recalculation_index > self.min_recalculation_period:
+            if self.candles_since_recalculation > self.min_recalculation_period:
+                self.brick_size = self.calculate_optimal_brick_size()
 
+    def on_new_candle(self, candle):
+        # convert ftx candle to binance candle bc close_price is binance format
+        self.close_price = self.close_price.append([[
+            candle['time'],
+            candle['open'],
+            candle['high'],
+            candle['low'],
+            candle['close'],
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]], ignore_index=True)
+        self.__renko_rule(self.close_price.iloc[-1, 4])
 
-    def __renko_rule(self, last_price, candle_index):
+    def __renko_rule(self, last_price):
+        log.info(f'running renko rule on last price: {last_price}')
+        self.candles_since_recalculation += 1
         # Get the gap between two prices
         gap_div = int(
             float(last_price - self.renko_prices[-1]) / self.brick_size)
@@ -159,11 +240,14 @@ class renko:
 
             if is_new_brick:
                 # Add each brick
-                for d in range(start_brick, np.abs(gap_div)):
-                    self.renko_prices.append(
-                        self.renko_prices[-1] + self.brick_size * np.sign(gap_div))
+                for _ in range(start_brick, np.abs(gap_div)):
+                    brick_price = self.renko_prices[-1] + self.brick_size * np.sign(gap_div)
+                    log.info(f'new brick price: {brick_price}')
+                    self.renko_prices.append(brick_price)
                     self.renko_directions.append(np.sign(gap_div))
-                self.__trend_following_strategy(candle_index)
+                self.__trend_following_strategy()
+            else:
+                log.info('no new bricks')
 
         return num_new_bars
 
@@ -219,52 +303,6 @@ class renko:
                 self.__renko_rule_for_calculation(float(p), index)
 
         return len(self.renko_prices)
-
-    # Getting renko on history
-    def build_history(self):
-        prices = self.close_price.iloc[self.trailing_history_window:, 4]
-
-        if len(prices) > 0:
-            # Init by start values
-            self.source_prices = prices
-            self.renko_prices.append(float(prices.iloc[0]))
-            self.renko_directions.append(0)
-
-            # print(self.renko_prices)
-
-            # For each price in history
-            for index, p in enumerate(self.source_prices[1:]):
-                self.__renko_rule(float(p), index)
-
-        return len(self.renko_prices)
-
-    # Getting next renko value for last price
-    def do_next(self, last_price):
-        if len(self.renko_prices) == 0:
-            self.source_prices.append(last_price)
-            self.renko_prices.append(last_price)
-            self.renko_directions.append(0)
-            return 1
-        else:
-            self.source_prices.append(last_price)
-            return self.__renko_rule(last_price)
-
-    # Simple method to get optimal brick size based on ATR
-    def __get_optimal_brick_size(self, HLC_history, atr_timeperiod=14):
-        brick_size = 0.0
-
-        # If we have enough of data
-        if HLC_history.shape[0] > atr_timeperiod:
-            brick_size = np.median(talib.ATR(high=np.double(HLC_history.iloc[:, 0]),
-                                             low=np.double(
-                                                 HLC_history.iloc[:, 1]),
-                                             close=np.double(
-                                                 HLC_history.iloc[:, 2]),
-                                             timeperiod=atr_timeperiod)[atr_timeperiod:])
-            self.atr = talib.ATR(high=np.double(HLC_history.iloc[:, 0]), low=np.double(
-                HLC_history.iloc[:, 1]), close=np.double(HLC_history.iloc[:, 2]), timeperiod=atr_timeperiod)[atr_timeperiod:]
-
-        return brick_size
 
     def evaluate_for_calculation(self, history, method='simple'):
         balance = 0
