@@ -25,7 +25,7 @@ day = 24*hour
 week = 7*day
 
 trailing_history_window = 3*day
-min_recalculation_period = 6*day
+min_recalculation_period = 5 #6*day
 
 def now():
       return int(time.time())
@@ -43,6 +43,8 @@ if __name__ == '__main__':
       log.info(f'min recalculation period={min_recalculation_period/hour} hours')
 
       ftx = FtxClient(api_key, api_secret, subaccount_name)
+
+      ftx.close_positions(market)
 
       parser = argparse.ArgumentParser()
       parser.add_argument("--prices_file", help="File with prices", type=str, default='')

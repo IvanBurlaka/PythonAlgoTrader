@@ -1,5 +1,10 @@
-from binance.client import Client
+import logging
 import pickle
+
+from binance.client import Client
+
+
+log = logging.getLogger(__package__)
 
 
 def get_close_prices_and_times(trading_pair, date_from, date_to, interval):
@@ -7,7 +12,7 @@ def get_close_prices_and_times(trading_pair, date_from, date_to, interval):
     api_secret = "eZya3Izd6CZO2D1GegdMkQzuAmyIw9nengWFPwmVEPoWjBer6ABfWKkxuerYnRIj"
     client = Client(api_key, api_secret)
 
-    print("Starting downloading history")
+    log.debug("Starting downloading history")
 
     bars = client.get_historical_klines(
         symbol=trading_pair,
@@ -16,7 +21,7 @@ def get_close_prices_and_times(trading_pair, date_from, date_to, interval):
         end_str=date_to + "T23:59:00+03:00"
     )
 
-    print("Finished: History size = " + str(len(bars)))
+    log.debug("Finished: History size = " + str(len(bars)))
 
     return bars
 

@@ -86,7 +86,7 @@ class renko:
         if len(prices) > 0:
             # Init by start values
             self.source_prices = prices
-            self.renko_prices.append(float(prices.iloc[0]))
+            self.renko_prices.append(float(prices.iloc[-1]))
             self.renko_directions.append(0)
 
     def get_usd_balance(self) -> float:
