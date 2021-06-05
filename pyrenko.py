@@ -1,3 +1,4 @@
+from ftx import FtxClient
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -8,26 +9,54 @@ from utils import *
 import pandas as pd
 
 
+def get_initial_history(market, minutes):
+      from datetime import date, timedelta
+      
+      market = market.replace('-PERP', 'USDT')
+      days = int(minutes/24/60)+1
+      today = date.today()
+
+      start = (today - timedelta(days)).strftime("%Y/%m/%d")
+      end = (today + timedelta(days=1)).strftime("%Y/%m/%d")
+
+      print(f'history start: {start}')
+      print(f'history end: {end}')
+
+      history = get_close_prices_and_times(market, start, end, '1m')
+      print(f'history length: {len(history)}')
+
+      return history
+
+
 class renko:
-    def __init__(self, prices_file, trailing_history_window, min_recalculation_period):
+    def __init__(self, ftx: FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
+        self.market = market
+
+        self.ftx = ftx
         self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
         self.renko_directions_for_calculation = []
-        self.current_capital = 1000
-
+        #self.current_capital = 1000
+        self.current_capital = self.get_usd_balance()
+        
         # trend following params
         self.position_data = {"trade_direction": "", "prices_opened": []}
         self.profit = []
         self.capital_history = []
-        self.close_price = pd.DataFrame(read_close_prices_and_times(prices_file))
+        # self.close_price = pd.DataFrame(read_close_prices_and_times(prices_file))
+        self.close_price = pd.DataFrame(get_initial_history(self.market, trailing_history_window))
         self.trailing_history_window = trailing_history_window
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
 
-    def get_close_price(self):
-        return self.close_price
+    def get_usd_balance(self) -> float:
+        balances = self.ftx.get_balances()
+        for b in balances:
+            if b['coin'] == 'USD':
+                return b['free']
+        return 0
 
     def calculate_optimal_brick_size(self, current_candle):
         self.last_recalculation_index = current_candle
@@ -37,20 +66,18 @@ class renko:
             self.build_history_for_calculation(history)
             return self.evaluate_for_calculation(history)[column_name]
 
-        close_prices = self.get_close_price()
-
         # Get ATR values (it needs to get boundaries)
         # Drop NaNs
-        atr = talib.ATR(high=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 2]),
-                        low=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 3]),
-                        close=np.double(close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 4]),
+        atr = talib.ATR(high=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 2]),
+                        low=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 3]),
+                        close=np.double(self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 4]),
                         timeperiod=14)
         atr = atr[np.isnan(atr) == False]
 
         # Get optimal brick size as maximum of score function by Brent's (or similar) method
         # First and Last ATR values are used as the boundaries
         return opt.fminbound(lambda x: -evaluate_renko(brick=x,
-                                                       history=close_prices.iloc[(current_candle - self.trailing_history_window):current_candle, 4],
+                                                       history=self.close_price.iloc[(current_candle - self.trailing_history_window):current_candle, 4],
                                                        column_name='score'),
                              np.min(atr),
                              np.max(atr),
@@ -93,6 +120,7 @@ class renko:
                         self.current_capital/position_divider*1.0002
             
             self.current_capital += profit
+            self.current_capital = self.get_usd_balance()
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
@@ -194,8 +222,7 @@ class renko:
 
     # Getting renko on history
     def build_history(self):
-        close_prices = self.get_close_price()
-        prices = close_prices.iloc[self.trailing_history_window:, 4]
+        prices = self.close_price.iloc[self.trailing_history_window:, 4]
 
         if len(prices) > 0:
             # Init by start values
