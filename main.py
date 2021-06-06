@@ -24,8 +24,8 @@ hour = 60*minute
 day = 24*hour
 week = 7*day
 
-trailing_history_window = 3*day
-min_recalculation_period = 6*day
+trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW', 3*day))
+min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD', 6*day))
 
 def now():
       return int(time.time())
@@ -41,6 +41,10 @@ if __name__ == '__main__':
       log.info(f'market={market}')
       log.info(f'trailing history window={trailing_history_window/hour} hours')
       log.info(f'min recalculation period={min_recalculation_period/hour} hours')
+
+      proceed = input('proceed? (y/n)\n').lower()
+      if proceed != 'y':
+            exit()
 
       ftx = FtxClient(api_key, api_secret, subaccount_name)
 

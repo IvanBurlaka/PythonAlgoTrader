@@ -143,23 +143,23 @@ class renko:
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
                     log.info(f'long: price={renko_price} size={size}')
-                    # self.ftx.place_order(
-                    #         market=self.market,
-                    #         side=ftx.buy,
-                    #         price=renko_price,
-                    #         size=size,
-                    #         type=ftx.limit,
-                    # )
+                    self.ftx.place_order(
+                            market=self.market,
+                            side=ftx.buy,
+                            price=renko_price,
+                            size=size,
+                            type=ftx.limit,
+                    )
                 else:
                     position_side = "short"
                     log.info(f'short: price={renko_price} size={size}')
-                    # self.ftx.place_order(
-                    #         market=self.market,
-                    #         side=ftx.sell,
-                    #         price=renko_price,
-                    #         size=size,
-                    #         type=ftx.limit,
-                    # )
+                    self.ftx.place_order(
+                            market=self.market,
+                            side=ftx.sell,
+                            price=renko_price,
+                            size=size,
+                            type=ftx.limit,
+                    )
                 self.position_data["trade_direction"] = position_side
             self.position_data["prices_opened"].append(renko_price)
         else:
