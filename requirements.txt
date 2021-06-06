@@ -1,0 +1,8 @@
+python-dotenv
+ciso8601
+numpy
+matplotlib
+ta-lib
+scipy
+python-binance
+pandas
