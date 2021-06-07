@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import talib
 import logging
+import os
 
 import scipy.optimize as opt
 from utils import *
@@ -54,9 +55,9 @@ def get_initial_history(market, minutes):
 
 
 class renko:
-    def __init__(self, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
+    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
+        self.paper_mode = paper_mode
         self.market = market
-
         self.ftx = ftx
         self.renko_prices = []
         self.renko_directions = []
@@ -131,31 +132,33 @@ class renko:
                 size = self.current_capital/renko_price
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
-                    log.info(f'new order: side={position_side} price={renko_price} size={size}')
-                    self.ftx.place_order(
-                            market=self.market,
-                            side=ftx.buy,
-                            price=renko_price,
-                            size=size,
-                            type=ftx.limit,
-                    )
+                    if not self.paper_mode:
+                        self.ftx.place_order(
+                                market=self.market,
+                                side=ftx.buy,
+                                price=renko_price,
+                                size=size,
+                                type=ftx.limit,
+                        )
                 else:
                     position_side = "short"
-                    log.info(f'new order: side={position_side} price={renko_price} size={size}')
-                    self.ftx.place_order(
-                            market=self.market,
-                            side=ftx.sell,
-                            price=renko_price,
-                            size=size,
-                            type=ftx.limit,
-                    )
+                    if not self.paper_mode:
+                        self.ftx.place_order(
+                                market=self.market,
+                                side=ftx.sell,
+                                price=renko_price,
+                                size=size,
+                                type=ftx.limit,
+                        )
+                log.info(f'new order: side={position_side} price={renko_price} size={size}')
                 self.position_data["trade_direction"] = position_side
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
             log.info(f'canceling orders, closing positions, price={renko_price}')
-            self.ftx.cancel_orders(market=self.market)
-            self.ftx.close_positions(self.market)
+            if not self.paper_mode:
+                self.ftx.cancel_orders(market=self.market)
+                self.ftx.close_positions(self.market)
 
             # profit = 0
             # position_divider = 3

@@ -24,6 +24,7 @@ hour = 60*minute
 day = 24*hour
 week = 7*day
 
+paper_mode = bool(os.getenv('PAPER_MODE', "True"))
 trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW', 3*day))
 min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD', 6*day))
 
@@ -44,6 +45,7 @@ if __name__ == '__main__':
       log.info(f'trailing history window: {trailing_history_window/hour} hours')
       log.info(f'min recalculation period: {min_recalculation_period/hour} hours')
       log.info(f'initial balance: {ftx.get_usd_balance()} usd')
+      log.info(f'paper mode: {paper_mode}')
 
       proceed = input('proceed? (y/n)\n').lower()
       if proceed != 'y':
@@ -55,7 +57,7 @@ if __name__ == '__main__':
       parser.add_argument("--prices_file", help="File with prices", type=str, default='')
       args = parser.parse_args()
 
-      renko_obj = pyrenko.renko(ftx, market, args.prices_file, trailing_history_window, min_recalculation_period)
+      renko_obj = pyrenko.renko(paper_mode, ftx, market, args.prices_file, trailing_history_window, min_recalculation_period)
 
       five_minutes = 5*60
       last_complete_candle_time = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]["startTime"]

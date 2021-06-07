@@ -8,9 +8,7 @@ log = logging.getLogger(__package__)
 
 
 def get_close_prices_and_times(trading_pair, date_from, date_to, interval):
-    api_key = "cVKzTz0yjcqXDB5hQGZcJF4EMFVKZDlQXFzCGVsYN3fVwbeB6ZXvdrcnrzOdAC9d"
-    api_secret = "eZya3Izd6CZO2D1GegdMkQzuAmyIw9nengWFPwmVEPoWjBer6ABfWKkxuerYnRIj"
-    client = Client(api_key, api_secret)
+    client = Client()
 
     log.debug("Starting downloading history")
 
