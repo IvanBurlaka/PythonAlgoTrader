@@ -38,15 +38,16 @@ if __name__ == '__main__':
       api_key = os.environ['API_KEY']
       api_secret = os.environ['API_SECRET']
 
-      log.info(f'market={market}')
-      log.info(f'trailing history window={trailing_history_window/hour} hours')
-      log.info(f'min recalculation period={min_recalculation_period/hour} hours')
+      ftx = FtxClient(api_key, api_secret, subaccount_name)
+
+      log.info(f'market: {market}')
+      log.info(f'trailing history window: {trailing_history_window/hour} hours')
+      log.info(f'min recalculation period: {min_recalculation_period/hour} hours')
+      log.info(f'initial balance: {ftx.get_usd_balance()} usd')
 
       proceed = input('proceed? (y/n)\n').lower()
       if proceed != 'y':
             exit()
-
-      ftx = FtxClient(api_key, api_secret, subaccount_name)
 
       ftx.close_positions(market)
 
@@ -56,13 +57,12 @@ if __name__ == '__main__':
 
       renko_obj = pyrenko.renko(ftx, market, args.prices_file, trailing_history_window, min_recalculation_period)
 
-      history = ftx.get_historical_prices(market, resolution, now()-10*60)
-      last_time = history[-2]["startTime"]
+      five_minutes = 5*60
+      last_complete_candle_time = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]["startTime"]
       while True:
             time.sleep(2)
-            history = ftx.get_historical_prices(market, resolution, now()-5*60)
-            if history[-2]["startTime"] > last_time:
-                  new_candle = history[-2]
-                  log.info(f'new candle: {new_candle}')
-                  last_time = new_candle["startTime"]
-                  renko_obj.on_new_candle(new_candle)
+            last_candle = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]
+            if last_candle["startTime"] > last_complete_candle_time:
+                  log.info(f'new candle: close price={last_candle["close"]} start time={last_candle["startTime"]}')
+                  last_complete_candle_time = last_candle["startTime"]
+                  renko_obj.on_new_candle(last_candle)

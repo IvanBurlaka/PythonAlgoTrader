@@ -58,14 +58,12 @@ class renko:
         self.market = market
 
         self.ftx = ftx
-        self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
         self.renko_directions_for_calculation = []
         #self.current_capital = 1000
-        self.current_capital = self.get_usd_balance()
-        log.info(f'initial balance: {self.current_capital}')
+        self.current_capital = self.ftx.get_usd_balance()
         
         # trend following params
         self.position_data = {"trade_direction": "", "prices_opened": []}
@@ -81,20 +79,11 @@ class renko:
 
         self.set_brick_size(auto=True)
 
-        prices = self.close_price.iloc[self.trailing_history_window:, 4]
+        # Init by start values
+        self.renko_prices.append(float(self.close_price.iloc[-1, 4]))
+        self.renko_directions.append(0)
 
-        if len(prices) > 0:
-            # Init by start values
-            self.source_prices = prices
-            self.renko_prices.append(float(prices.iloc[-1]))
-            self.renko_directions.append(0)
-
-    def get_usd_balance(self) -> float:
-        balances = self.ftx.get_balances()
-        for b in balances:
-            if b['coin'] == 'USD':
-                return b['free']
-        return 0
+        log.info(f'initial renko price: {self.renko_prices[-1]}')
 
     def calculate_optimal_brick_size(self):
         # self.last_recalculation_index = current_candle
@@ -164,7 +153,7 @@ class renko:
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
-            log.info('canceling orders, closing positions, price={renko_price}')
+            log.info(f'canceling orders, closing positions, price={renko_price}')
             self.ftx.cancel_orders(market=self.market)
             self.ftx.close_positions(self.market)
 
@@ -181,8 +170,8 @@ class renko:
             #             self.current_capital/position_divider*1.0002
             
             # self.current_capital += profit
-            self.current_capital = self.get_usd_balance()
-            log.info(f'balance: {self.current_capital}')
+            self.current_capital = self.ftx.get_usd_balance()
+            log.info(f'balance: {self.current_capital} usd')
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
@@ -213,11 +202,12 @@ class renko:
     def __renko_rule(self, last_price):
         #log.info(f'running renko rule on last price: {last_price}')
         # Get the gap between two prices
-        gap_div = int(
-            float(last_price - self.renko_prices[-1]) / self.brick_size)
+        gap_div = int(float(last_price - self.renko_prices[-1]) / self.brick_size)
         is_new_brick = False
         start_brick = 0
         num_new_bars = 0
+
+        # log.info(f'last_price={last_price} last_renko_price={self.renko_prices[-1]} gap_div={gap_div}')
 
         # When we have some gap in prices
         if gap_div != 0:
@@ -233,9 +223,10 @@ class renko:
                 num_new_bars -= np.sign(gap_div)
                 start_brick = 2
                 is_new_brick = True
-                self.renko_prices.append(
-                    self.renko_prices[-1] + 2 * self.brick_size * np.sign(gap_div))
+                brick_price = self.renko_prices[-1] + 2 * self.brick_size * np.sign(gap_div)
+                self.renko_prices.append(brick_price)
                 self.renko_directions.append(np.sign(gap_div))
+                log.info(f'new brick: {brick_price}')
             # else:
             # num_new_bars = 0
 
@@ -243,9 +234,9 @@ class renko:
                 # Add each brick
                 for _ in range(start_brick, np.abs(gap_div)):
                     brick_price = self.renko_prices[-1] + self.brick_size * np.sign(gap_div)
-                    log.info(f'new brick: {brick_price}')
                     self.renko_prices.append(brick_price)
                     self.renko_directions.append(np.sign(gap_div))
+                    log.info(f'new brick: {brick_price}')
                 self.__trend_following_strategy()
 
         return num_new_bars
@@ -289,7 +280,6 @@ class renko:
 
     # Getting renko on history
     def build_history_for_calculation(self, history):
-
         if len(history) > 0:
             # Init by start values
             self.renko_prices_for_calculation.append(float(history.iloc[0]))
@@ -326,39 +316,6 @@ class renko:
             self.renko_directions_for_calculation = []
             return {'balance': balance, 'sign_changes:': sign_changes,
                     'price_ratio': price_ratio, 'score': score}
-
-    def evaluate(self, method='simple'):
-        balance = 0
-        sign_changes = 0
-        price_ratio = len(self.source_prices) / len(self.renko_prices)
-
-        if method == 'simple':
-            for i in range(2, len(self.renko_directions)):
-                if self.renko_directions[i] == self.renko_directions[i - 1]:
-                    balance = balance + 1
-                else:
-                    balance = balance - 2
-                    sign_changes = sign_changes + 1
-
-            if sign_changes == 0:
-                sign_changes = 1
-
-            score = balance / sign_changes
-            if score >= 0 and price_ratio >= 1:
-                score = np.log(score + 1) * np.log(price_ratio)
-            else:
-                score = -1.0
-            return {'balance': balance, 'sign_changes:': sign_changes,
-                    'price_ratio': price_ratio, 'score': score}
-
-    def get_renko_prices(self):
-        return self.renko_prices
-
-    def get_sma(self):
-        return self.sma
-
-    def get_balance(self):
-        return self.current_capital, 1000 - min(self.capital_history), self.brick_size
 
     def get_renko_directions(self):
         return self.renko_directions

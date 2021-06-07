@@ -24,6 +24,12 @@ class FtxClient:
         self._api_secret = api_secret
         self._subaccount_name = subaccount_name
 
+        from requests.adapters import HTTPAdapter
+        from requests.packages.urllib3.util.retry import Retry
+
+        retries = Retry(total=4, backoff_factor=0.3)
+        self._session.mount('https://', HTTPAdapter(max_retries=retries))
+
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         return self._request('GET', path, params=params)
 
@@ -74,6 +80,13 @@ class FtxClient:
                 'resolution': resolution,
                 'start_time': start_time,
             })
+    
+    def get_usd_balance(self) -> float:
+        balances = self.get_balances()
+        for b in balances:
+            if b['coin'] == 'USD':
+                return b['free']
+        return 0
 
     def get_orderbook(self, market: str, depth: int = None) -> dict:
         return self._get(f'markets/{market}/orderbook', {'depth': depth})
