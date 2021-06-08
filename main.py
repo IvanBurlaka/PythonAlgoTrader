@@ -24,7 +24,7 @@ hour = 60*minute
 day = 24*hour
 week = 7*day
 
-paper_mode = bool(os.getenv('PAPER_MODE', "True"))
+paper_mode = bool(os.getenv('PAPER_MODE', "True").upper() != "FALSE")
 trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW', 3*day))
 min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD', 6*day))
 
