@@ -191,22 +191,23 @@ class FtxClient:
         for p in positions:
             if p["future"] == mkt:
                 size = p["size"]
-                if p["side"] == buy:
-                    self.place_order(
-                        market=mkt,
-                        side=sell,
-                        price="0",
-                        type=market,
-                        size=size,
-                    )
-                else:
-                    self.place_order(
-                        market=mkt,
-                        side=buy,
-                        price="0",
-                        type=market,
-                        size=size,
-                    )
+                if size != 0:
+                    if p["side"] == buy:
+                        self.place_order(
+                            market=mkt,
+                            side=sell,
+                            price="0",
+                            type=market,
+                            size=size,
+                        )
+                    else:
+                        self.place_order(
+                            market=mkt,
+                            side=buy,
+                            price="0",
+                            type=market,
+                            size=size,
+                        )
 
     def get_all_trades(self, market: str, start_time: float = None, end_time: float = None) -> List:
         ids = set()
