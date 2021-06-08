@@ -186,28 +186,30 @@ class FtxClient:
     def get_position(self, name: str, show_avg_price: bool = False) -> dict:
         return next(filter(lambda x: x['future'] == name, self.get_positions(show_avg_price)), None)
 
-    def close_positions(self, mkt: str):
-        positions = self.get_positions()
-        for p in positions:
-            if p["future"] == mkt:
-                size = p["size"]
-                if size != 0:
-                    if p["side"] == buy:
-                        self.place_order(
-                            market=mkt,
-                            side=sell,
-                            price="0",
-                            type=market,
-                            size=size,
-                        )
-                    else:
-                        self.place_order(
-                            market=mkt,
-                            side=buy,
-                            price="0",
-                            type=market,
-                            size=size,
-                        )
+    def close_position(self, mkt: str):
+        position = self.get_position(mkt)
+        if not position:
+            return
+
+        size = position["size"]
+
+        if size != 0:
+            if position["side"] == buy:
+                self.place_order(
+                    market=mkt,
+                    side=sell,
+                    price="0",
+                    type=market,
+                    size=size,
+                )
+            else:
+                self.place_order(
+                    market=mkt,
+                    side=buy,
+                    price="0",
+                    type=market,
+                    size=size,
+                )
 
     def get_all_trades(self, market: str, start_time: float = None, end_time: float = None) -> List:
         ids = set()

@@ -51,7 +51,7 @@ if __name__ == '__main__':
       if proceed != 'y':
             exit()
 
-      ftx.close_positions(market)
+      ftx.close_position(market)
 
       parser = argparse.ArgumentParser()
       parser.add_argument("--prices_file", help="File with prices", type=str, default='')

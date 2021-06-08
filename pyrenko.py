@@ -158,7 +158,7 @@ class renko:
             log.info(f'canceling orders, closing positions, price={renko_price}')
             if not self.paper_mode:
                 self.ftx.cancel_orders(market=self.market)
-                self.ftx.close_positions(self.market)
+                self.ftx.close_position(self.market)
 
             # profit = 0
             # position_divider = 3
