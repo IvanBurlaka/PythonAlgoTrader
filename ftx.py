@@ -1,3 +1,4 @@
+import logging
 import time
 import urllib.parse
 from typing import Optional, Dict, Any, List
@@ -6,6 +7,8 @@ from requests import Request, Session, Response
 import hmac
 from ciso8601 import parse_datetime
 
+
+log = logging.getLogger(__package__)
 
 
 buy='buy'
@@ -40,10 +43,21 @@ class FtxClient:
         return self._request('DELETE', path, json=params)
 
     def _request(self, method: str, path: str, **kwargs) -> Any:
-        request = Request(method, self._ENDPOINT + path, **kwargs)
-        self._sign_request(request)
-        response = self._session.send(request.prepare())
-        return self._process_response(response)
+        max_retries = 4
+        delay_seconds = 1
+        attempt = 1
+
+        while attempt <= max_retries:
+            try:
+                request = Request(method, self._ENDPOINT + path, **kwargs)
+                self._sign_request(request)
+                response = self._session.send(request.prepare())
+                return self._process_response(response)
+            except Exception as e:
+                attempt += 1
+                log.error(f'exception during executing "{method} {path}": {e}, retrying after {delay_seconds} seconds')
+                time.sleep(delay_seconds)
+        raise RuntimeError(f'exceeded max retries of "{method} {path}"')
 
     def _sign_request(self, request: Request) -> None:
         ts = int(time.time() * 1000)
@@ -76,7 +90,7 @@ class FtxClient:
         return self._get('markets')
     
     def get_historical_prices(self, market: str, resolution: str, start_time: int) -> List[dict]:
-        return self._get(f'/markets/{market}/candles', {
+        return self._get(f'markets/{market}/candles', {
                 'resolution': resolution,
                 'start_time': start_time,
             })
