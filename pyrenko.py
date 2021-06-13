@@ -1,10 +1,8 @@
 import ftx
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import talib
 import logging
-import os
+import time
 
 import scipy.optimize as opt
 from utils import *
@@ -35,30 +33,12 @@ def get_initial_history(market, minutes):
     return history
 
 
-# def get_initial_history(ftx, minutes):
-#       def parse_time(t):
-#             return parse_datetime(t).timestamp()
-
-#       result = ftx.get_historical_prices(market, '60', now()-(minutes+1)*60)
-
-#       while True:
-#             print(result[-1]["startTime"])
-#             last_time = parse_time(result[-1]["startTime"])
-#             candles = ftx.get_historical_prices(market, '60', last_time)
-#             candles = [c for c in candles if parse_time(c["startTime"]) > last_time]
-#             result.extend(candles)
-#             print(f'adding {len(candles)} candles')
-#             if not candles:
-#                   break
-
-#       return result[:-1]
-
-
 class renko:
-    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period):
+    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period, max_position_close_seconds):
         self.paper_mode = paper_mode
         self.market = market
         self.ftx = ftx
+        self.max_position_close_seconds = max_position_close_seconds
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
@@ -117,8 +97,6 @@ class renko:
     # Setting brick size. Auto mode is preferred, it uses history
     def set_brick_size(self, HLC_history=None, auto=True, brick_size=10.0):
         if auto == True:
-            # test = self.get_close_price().iloc[:, [2, 3, 4]]
-            # self.brick_size = self.__get_optimal_brick_size(HLC_history=test)
             self.brick_size = self.calculate_optimal_brick_size()
         else:
             self.brick_size = brick_size
@@ -155,22 +133,9 @@ class renko:
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
-            log.info(f'canceling orders, closing positions, price={renko_price}')
+            log.info(f'closing position, price={renko_price}')
             if not self.paper_mode:
-                self.ftx.cancel_orders(market=self.market)
-                self.ftx.close_position(self.market)
-
-            # profit = 0
-            # position_divider = 3
-            # for price in self.position_data["prices_opened"][:position_divider]:
-            #     if self.position_data["trade_direction"] == 'long':
-            #         profit += renko_price/price * \
-            #             (self.current_capital/position_divider) - \
-            #             self.current_capital/position_divider*1.0002
-            #     else:
-            #         profit += price/renko_price * \
-            #             (self.current_capital/position_divider) - \
-            #             self.current_capital/position_divider*1.0002
+                self.close_position(self.max_position_close_seconds)
             
             # self.current_capital += profit
             self.current_capital = self.ftx.get_usd_balance()
@@ -179,9 +144,42 @@ class renko:
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
             # recalculate brick size
-            #if candle_index - self.last_recalculation_index > self.min_recalculation_period:
             if self.candles_since_recalculation > self.min_recalculation_period:
                 self.brick_size = self.calculate_optimal_brick_size()
+    
+    def close_position(self, max_wait_seconds=0):
+        self.ftx.cancel_orders(market=self.market)
+
+        position = self.ftx.get_position(self.market)
+        if not position or not position["size"]:
+            return
+
+        size = position["size"]
+        side = ftx.sell if position["side"] == ftx.buy else ftx.buy
+
+        if max_wait_seconds == 0:
+            # market close position
+            self.ftx.place_order(
+                market=self.market,
+                side=side,
+                price="0",
+                type=ftx.market,
+                size=size,
+            )
+        else:
+            # try limit close position
+            order_type = ftx.limit
+            renko_price = self.renko_prices[-1]
+            self.ftx.place_order(
+                market=self.market,
+                side=side,
+                price=renko_price,
+                type=order_type,
+                size=size,
+            )
+            time.sleep(max_wait_seconds)
+            # ensure market close of position if it's still open
+            self.close_position(0)
 
     def on_new_candle(self, candle):
         # convert ftx candle to binance candle bc close_price is binance format
@@ -319,39 +317,3 @@ class renko:
             self.renko_directions_for_calculation = []
             return {'balance': balance, 'sign_changes:': sign_changes,
                     'price_ratio': price_ratio, 'score': score}
-
-    def get_renko_directions(self):
-        return self.renko_directions
-
-    def plot_renko(self, col_up='g', col_down='r'):
-        fig, ax = plt.subplots(1, figsize=(20, 10))
-        ax.set_title('Renko chart')
-        ax.set_xlabel('Renko bars')
-        ax.set_ylabel('Price')
-
-        # Calculate the limits of axes
-        ax.set_xlim(0.0,
-                    len(self.renko_prices) + 1.0)
-        ax.set_ylim(np.min(self.renko_prices) - 3.0 * self.brick_size,
-                    np.max(self.renko_prices) + 3.0 * self.brick_size)
-
-        # Plot each renko bar
-        for i in range(1, len(self.renko_prices)):
-            # Set basic params for patch rectangle
-            col = col_up if self.renko_directions[i] == 1 else col_down
-            x = i
-            y = self.renko_prices[i] - \
-                self.brick_size if self.renko_directions[i] == 1 else self.renko_prices[i]
-            height = self.brick_size
-
-            # Draw bar with params
-            ax.add_patch(
-                patches.Rectangle(
-                    (x, y),  # (x,y)
-                    1.0,  # width
-                    self.brick_size,  # height
-                    facecolor=col
-                )
-            )
-
-        plt.show()
