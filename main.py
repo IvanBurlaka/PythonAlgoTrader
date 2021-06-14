@@ -49,10 +49,6 @@ if __name__ == '__main__':
       log.info(f'initial balance: {ftx.get_usd_balance()} usd')
       log.info(f'paper mode: {paper_mode}')
 
-      proceed = input('proceed? (y/n)\n').lower()
-      if proceed != 'y':
-            exit()
-
       parser = argparse.ArgumentParser()
       parser.add_argument("--prices_file", help="File with prices", type=str, default='')
       args = parser.parse_args()

@@ -1,0 +1,12 @@
+[Unit]
+Description=Algo svc
+
+[Service]
+StandardOutput=append:/tmp/algo/algo.log
+StandardError=append:/tmp/algo/algo.log
+EnvironmentFile=/tmp/algo/.env
+ExecStart=python3 /tmp/algo/main.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
