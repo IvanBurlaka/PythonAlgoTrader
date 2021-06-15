@@ -26,7 +26,7 @@ week = 7*day
 
 paper_mode = bool(os.getenv('PAPER_MODE', "True").upper() != "FALSE")
 max_position_close_seconds = int(os.getenv('MAX_POSITION_CLOSE_SECONDS', 0))
-trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW', 3*day))
+trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW', 30*day))
 min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD', 6*day))
 
 def now():
@@ -55,7 +55,9 @@ if __name__ == '__main__':
 
       renko_obj = pyrenko.renko(paper_mode, ftx, market, args.prices_file, trailing_history_window, min_recalculation_period, max_position_close_seconds)
       
-      renko_obj.close_position()
+      if not paper_mode:
+            log.info('closing position if it is open')
+            renko_obj.close_position()
 
       five_minutes = 5*60
       last_complete_candle_time = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]["startTime"]
