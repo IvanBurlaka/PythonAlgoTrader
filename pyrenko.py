@@ -75,6 +75,7 @@ class renko:
         self.trailing_history_window = trailing_history_window
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
+        self.number_of_candles_calculations = 10
 
         self.candles_since_recalculation = 0
 
@@ -104,12 +105,18 @@ class renko:
 
         # Get optimal brick size as maximum of score function by Brent's (or similar) method
         # First and Last ATR values are used as the boundaries
-        result = opt.fminbound(lambda x: -evaluate_renko(brick=x,
-                                                       history=self.close_price.iloc[-self.trailing_history_window:, 4],
+        renko_values=[]
+        candles_spread=0
+        while candles_spread < self.number_of_candles_calculations:
+            renko_values.append(opt.fminbound(lambda x: -evaluate_renko(brick=x,
+                                                       history=self.close_price.iloc[-self.trailing_history_window+candles_spread:, 4],
                                                        column_name='score'),
                              np.min(atr),
                              np.max(atr),
-                             disp=0)
+                             disp=0))
+            candles_spread += 1
+
+        result = np.median(renko_values)
         log.info(f'calculated optimal brick size: {result}')
         self.candles_since_recalculation = 0
         return result
