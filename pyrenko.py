@@ -55,7 +55,7 @@ class renko:
         self.trailing_history_window = trailing_history_window
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
-        self.number_of_candles_calculations = 10
+        self.number_of_candles_calculations = 9
 
         self.candles_since_recalculation = 0
 
