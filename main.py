@@ -25,17 +25,22 @@ if __name__ == '__main__':
 
     # print('optimal', optimal_brick_sfo)
 
-    renko_obj = pyrenko.renko()
+    hour = 60
+    day = 24*hour
 
+    time_increment = 30*day
+
+ #   while time_increment <= day*40:
+    renko_obj = pyrenko.renko(trailing_history=time_increment, largest_trailing_history=40*day)
     print('Set brick size (manual mode): ',
-          renko_obj.set_brick_size(auto=True))
-
+    renko_obj.set_brick_size(auto=True))
     renko_obj.build_history()
+#        time_increment+=day
 
     # print('Renko bar prices: ', renko_obj.get_renko_prices())
     # print('Renko bar directions: ', renko_obj.get_renko_directions())
     print('Renko bar evaluation: ', renko_obj.evaluate())
     print('Balance: ', renko_obj.get_balance())
 
-    if len(renko_obj.get_renko_prices()) > 1:
-        renko_obj.plot_renko()
+#    if len(renko_obj.get_renko_prices()) > 1:
+#       renko_obj.plot_renko()
