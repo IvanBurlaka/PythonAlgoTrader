@@ -56,6 +56,7 @@ class renko:
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
         self.number_of_candles_calculations = 9
+        self.is_multiple_bricks_in_opposite_direction = False
 
         self.candles_since_recalculation = 0
 
@@ -111,7 +112,7 @@ class renko:
 
     def __trend_following_strategy(self):
         renko_price = self.renko_prices[-1]
-        if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1]:
+        if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1] and not self.is_multiple_bricks_in_opposite_direction:
             # direction matches previous, then open position in following direction
             if not self.position_data["trade_direction"]:
                 size = self.current_capital/renko_price
@@ -153,6 +154,7 @@ class renko:
             # recalculate brick size
             if self.candles_since_recalculation > self.min_recalculation_period:
                 self.brick_size = self.calculate_optimal_brick_size()
+            self.is_multiple_bricks_in_opposite_direction = False
     
     def close_position(self, max_wait_seconds=0):
         self.ftx.cancel_orders(market=self.market)
@@ -214,6 +216,7 @@ class renko:
         is_new_brick = False
         start_brick = 0
         num_new_bars = 0
+        is_direction_opposite = False
 
         # log.info(f'last_price={last_price} last_renko_price={self.renko_prices[-1]} gap_div={gap_div}')
 
@@ -231,6 +234,7 @@ class renko:
                 num_new_bars -= np.sign(gap_div)
                 start_brick = 2
                 is_new_brick = True
+                is_direction_opposite = True
                 brick_price = self.renko_prices[-1] + 2 * self.brick_size * np.sign(gap_div)
                 self.renko_prices.append(brick_price)
                 self.renko_directions.append(np.sign(gap_div))
@@ -244,6 +248,8 @@ class renko:
                     brick_price = self.renko_prices[-1] + self.brick_size * np.sign(gap_div)
                     self.renko_prices.append(brick_price)
                     self.renko_directions.append(np.sign(gap_div))
+                    if (is_direction_opposite):
+                        self.is_multiple_bricks_in_opposite_direction = True
                     log.info(f'new brick: {brick_price}')
                 self.__trend_following_strategy()
 
