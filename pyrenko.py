@@ -7,14 +7,14 @@ import scipy.optimize as opt
 from utils import *
 import pandas as pd
 
-
 class renko:
-    def __init__(self, trailing_history, largest_trailing_history):
+    def __init__(self, trailing_history, largest_trailing_history, position_divider):
         self.source_prices = []
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
         self.renko_directions_for_calculation = []
+        self.brick_sizes = []
         self.current_capital = 1000
 
         # trend following params
@@ -23,18 +23,35 @@ class renko:
         self.capital_history = []
         self.close_price = pd.DataFrame(read_close_prices_and_times())
         self.trailing_history_window = trailing_history #in minutes
-        self.min_recalculation_period = 1440
+        self.min_recalculation_period = 1440*3
         self.last_recalculation_index = 0
         self.largest_trailing_history = largest_trailing_history
         self.number_of_candles_calculations = 9
         self.number_of_trades = 0
         self.is_multiple_bricks_in_opposite_direction = False
+        self.position_divider = position_divider
+
+        self.indexes_of_brick_size_retrace = []
+
+        self.indexes_of_upward_retrace = []
+        self.indexes_of_downward_retrace = []
+
+        self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction = []
+        self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction = []
+
+        self.candle_indexes_of_upward_retrace = []
+
+        macd, signal, hist = talib.MACD(self.close_price.iloc[:, 4],fastperiod=12, slowperiod=26, signalperiod=9)
+        self.macd_hist = hist
 
     def get_close_price(self):
         return self.close_price
 
-    def calculate_optimal_brick_size(self, current_candle):
-        self.last_recalculation_index = current_candle
+    def calculate_optimal_brick_size(self, current_candle, is_initial_calculation):
+        if (is_initial_calculation):
+            self.last_recalculation_index = current_candle - self.largest_trailing_history
+        else:
+            self.last_recalculation_index = current_candle - self.trailing_history_window
         # Function for optimization
         def evaluate_renko(brick, history, column_name):
             self.set_brick_size(brick_size=brick, auto=False)
@@ -71,28 +88,40 @@ class renko:
         if auto == True:
             # test = self.get_close_price().iloc[:, [2, 3, 4]]
             # self.brick_size = self.__get_optimal_brick_size(HLC_history=test)
-            self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window)
+            self.brick_size = self.calculate_optimal_brick_size(current_candle=self.largest_trailing_history, is_initial_calculation=True)
+            self.brick_sizes.append(self.brick_size)
         else:
             self.brick_size = brick_size
         return self.brick_size
 
-    def __trend_following_strategy(self, candle_index):
+    def __trend_following_strategy(self, candle_index, last_price):
         renko_price = self.renko_prices[-1]
         prev_renko_price = self.renko_prices[-2]
         if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1] and not self.is_multiple_bricks_in_opposite_direction:
             # direction matches previous, then open position in following direction
             if not self.position_data["trade_direction"]:
+                atr = talib.ATR(high=np.double(self.close_price.iloc[
+                                               self.largest_trailing_history + candle_index - 15:self.largest_trailing_history + candle_index,
+                                               2]),
+                                low=np.double(self.close_price.iloc[self.largest_trailing_history + candle_index - 15:
+                                                                    self.largest_trailing_history + candle_index, 3]),
+                                close=np.double(self.close_price.iloc[self.largest_trailing_history + candle_index - 15:
+                                                                      self.largest_trailing_history + candle_index, 4]),
+                                timeperiod=14)
+                atr = atr[np.isnan(atr) == False][0]
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
+                    self.position_data["stop_loss"] = renko_price - 0.75*atr
                 else:
                     position_side = "short"
+                    self.position_data["stop_loss"] = renko_price + 0.75*atr
                 self.position_data["trade_direction"] = position_side
                 self.number_of_trades += 1
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
             profit = 0
-            position_divider = 1
+            position_divider = self.position_divider
             for price in self.position_data["prices_opened"][:position_divider]:
                 if self.position_data["trade_direction"] == 'long':
                     profit += renko_price/price * \
@@ -106,11 +135,9 @@ class renko:
             self.capital_history.append(self.current_capital)
             self.position_data["trade_direction"] = None
             self.position_data["prices_opened"] = []
-
             # recalculate brick size
             if candle_index - self.last_recalculation_index > self.min_recalculation_period:
-                self.brick_size = self.calculate_optimal_brick_size(current_candle=self.trailing_history_window+candle_index)
-                print(self.brick_size)
+                self.brick_size = self.calculate_optimal_brick_size(current_candle=candle_index+self.trailing_history_window, is_initial_calculation=False)
             self.is_multiple_bricks_in_opposite_direction = False
 
     def __renko_rule(self, last_price, candle_index):
@@ -122,6 +149,72 @@ class renko:
         num_new_bars = 0
         is_direction_opposite = False
 
+        self.macd_cross_up_down = False
+        self.macd_cross_down_up = False
+
+        if self.position_data["trade_direction"]:
+            if self.position_data["trade_direction"] == 'long':
+                if last_price <= self.position_data["stop_loss"]:
+                    self.current_capital-=self.position_data["prices_opened"][0] - self.position_data["stop_loss"]
+                    self.position_data["trade_direction"] = None
+                    self.position_data["prices_opened"] = []
+            else:
+                if last_price >= self.position_data["stop_loss"]:
+                    self.current_capital-=self.position_data["stop_loss"] - self.position_data["prices_opened"][0]
+                    self.position_data["trade_direction"] = None
+                    self.position_data["prices_opened"] = []
+
+        if self.renko_directions[-1] == 1 and self.renko_directions[-2] == -1:
+            if last_price < self.renko_prices[-1]:
+                self.is_dropped_below_last_renko = True
+            if self.is_dropped_below_last_renko and last_price > self.renko_prices[-1]:
+                self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction.append(len(self.renko_prices) - 1) if (len(self.renko_prices) - 1) not in self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction else self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction
+
+        if self.renko_directions[-1] == -1 and self.renko_directions[-2] == 1:
+            if last_price > self.renko_prices[-1]:
+                self.is_dropped_above_last_renko = True
+            if self.is_dropped_above_last_renko and last_price < self.renko_prices[-1]:
+                self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction.append(len(self.renko_prices) - 1) if (len(self.renko_prices) - 1) not in self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction else self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction
+        if self.renko_directions[-1] == 1:
+            if last_price < self.renko_prices[-1] - self.brick_size:
+                self.indexes_of_upward_retrace.append(len(self.renko_prices) - 1) if (len(self.renko_prices) - 1) not in self.indexes_of_upward_retrace else self.indexes_of_upward_retrace
+                self.candle_indexes_of_upward_retrace.append([candle_index + self.largest_trailing_history,self.renko_prices[-1] - self.brick_size]) if [candle_index + self.largest_trailing_history,self.renko_prices[-1] - self.brick_size] not in self.candle_indexes_of_upward_retrace else self.candle_indexes_of_upward_retrace
+        else:
+            if last_price > self.renko_prices[-1] + self.brick_size:
+                self.indexes_of_downward_retrace.append(len(self.renko_prices) - 1) if (len(self.renko_prices) - 1) not in self.indexes_of_downward_retrace else self.indexes_of_downward_retrace
+
+        if (len(self.renko_prices) - 1) in self.indexes_of_downward_retrace or (len(self.renko_prices) - 1) in self.indexes_of_upward_retrace:
+            profit = 0
+            position_divider = self.position_divider
+            for price in self.position_data["prices_opened"][:position_divider]:
+                if self.position_data["trade_direction"] == 'long':
+                    profit += (self.renko_prices[-1] - self.brick_size)/price * \
+                        (self.current_capital/position_divider) - \
+                        self.current_capital/position_divider*1.0002
+                else:
+                    profit += price/(self.renko_prices[-1] + self.brick_size) * \
+                        (self.current_capital/position_divider) - \
+                        self.current_capital/position_divider*1.0002
+            self.current_capital += profit
+            self.capital_history.append(self.current_capital)
+            self.position_data["trade_direction"] = None
+            self.position_data["prices_opened"] = []
+        profit = 0
+        position_divider = self.position_divider
+        # for price in self.position_data["prices_opened"][:position_divider]:
+        #     if self.position_data["trade_direction"] == 'long' and self.macd_hist[self.largest_trailing_history + candle_index] < 0 and self.macd_hist[self.largest_trailing_history + candle_index -1] > 0:
+        #         profit += (last_price)/price * \
+        #             (self.current_capital/position_divider) - \
+        #             self.current_capital/position_divider*1.0002
+        #     elif self.position_data["trade_direction"] == 'short' and self.macd_hist[self.largest_trailing_history + candle_index] > 0 and self.macd_hist[self.largest_trailing_history + candle_index -1] < 0:
+        #         profit += price/(last_price) * \
+        #             (self.current_capital/position_divider) - \
+        #             self.current_capital/position_divider*1.0002
+        # if profit != 0:
+        #     self.current_capital += profit
+        #     self.capital_history.append(self.current_capital)
+        #     self.position_data["trade_direction"] = None
+        #     self.position_data["prices_opened"] = []
         # When we have some gap in prices
         if gap_div != 0:
             # Forward any direction (up or down)
@@ -140,17 +233,22 @@ class renko:
                 self.renko_prices.append(
                     self.renko_prices[-1] + 2 * self.brick_size * np.sign(gap_div))
                 self.renko_directions.append(np.sign(gap_div))
+                self.brick_sizes.append(self.brick_size)
+
             # else:
             # num_new_bars = 0
 
-            if is_new_brick:                # Add each brick
+            if is_new_brick:
                 for d in range(start_brick, np.abs(gap_div)):
                     self.renko_prices.append(
                         self.renko_prices[-1] + self.brick_size * np.sign(gap_div))
                     self.renko_directions.append(np.sign(gap_div))
                     if (is_direction_opposite):
                         self.is_multiple_bricks_in_opposite_direction = True
-                self.__trend_following_strategy(candle_index)
+                    self.brick_sizes.append(self.brick_size)
+                self.__trend_following_strategy(candle_index, last_price)
+                self.is_dropped_below_last_renko=False
+                self.is_dropped_above_last_renko=False
         return num_new_bars
 
     def __renko_rule_for_calculation(self, last_price, candle_index):
@@ -220,7 +318,7 @@ class renko:
             for index, p in enumerate(self.source_prices[1:]):
                 self.__renko_rule(float(p), index)
 
-            print('Trades per day:', self.number_of_trades/(len(prices)/60/24))
+            print('Trades per day:', self.number_of_trades/(len(prices)/60/24), 'position divider', self.position_divider)
 
         return len(self.renko_prices)
 
@@ -282,6 +380,56 @@ class renko:
         balance = 0
         sign_changes = 0
         price_ratio = len(self.source_prices) / len(self.renko_prices)
+        trend_continued_after_sign_change = 0
+
+        min_snapshot = 1000
+        max_snapshot = 1000
+        self.largest_drawdown = 0
+        self.drawdawns = []
+        for snapshot in self.capital_history:
+            if snapshot > max_snapshot:
+                max_snapshot = snapshot
+                min_snapshot = snapshot
+            if snapshot < min_snapshot:
+                min_snapshot = snapshot
+                largest_drawdown = ((max_snapshot - min_snapshot)/max_snapshot)*100
+                if largest_drawdown > self.largest_drawdown:
+                    self.largest_drawdown = largest_drawdown
+                    self.drawdawns.append(largest_drawdown)
+
+        upward_trend_change_didnt_happen = 0
+        downward_trend_change_didnt_happen = 0
+        for i in self.indexes_of_upward_retrace:
+            if i < len(self.renko_directions) -1 and self.renko_directions[i] == 1:
+                if(self.renko_directions[i] == self.renko_directions[i+1]):
+                    upward_trend_change_didnt_happen += 1
+        for i in self.indexes_of_downward_retrace:
+            if i < len(self.renko_directions) -1 and self.renko_directions[i] == -1:
+                if(self.renko_directions[i] == self.renko_directions[i+1]):
+                    downward_trend_change_didnt_happen += 1
+        upward_direction_price_retraced_but_trend_continued_stat = upward_trend_change_didnt_happen/len(self.indexes_of_upward_retrace)
+        downward_direction_price_retraced_but_trend_continued_stat = downward_trend_change_didnt_happen/len(self.indexes_of_downward_retrace)
+
+        upward_trend_change_didnt_happen = 0
+        for i in self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction:
+            if i < len(self.renko_directions) -1 and self.renko_directions[i] == 1:
+                if(self.renko_directions[i] == self.renko_directions[i+1]):
+                    upward_trend_change_didnt_happen += 1
+        uptrend_after_first_brick_price_retraced_but_trend_continued = upward_trend_change_didnt_happen/len(self.indexes_of_drop_below_then_above_first_brick_in_opposite_direction)
+
+        downward_trend_change_didnt_happen = 0
+        for i in self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction:
+            if i < len(self.renko_directions) -1 and self.renko_directions[i] == -1:
+                if(self.renko_directions[i] == self.renko_directions[i+1]):
+                    downward_trend_change_didnt_happen += 1
+        downtrend_after_first_brick_price_retraced_but_trend_continued = downward_trend_change_didnt_happen/len(self.indexes_of_drop_above_then_below_first_brick_in_opposite_direction)
+
+        for i in range(2, (len(self.renko_directions) - 1)):
+            if self.renko_directions[i] == 1 and self.renko_directions[i - 1] == -1 and self.renko_directions[i] == self.renko_directions[i+1]:
+                trend_continued_after_sign_change += 1
+            if self.renko_directions[i] == -1 and self.renko_directions[i - 1] == 1 and self.renko_directions[i] == self.renko_directions[i+1]:
+                trend_continued_after_sign_change += 1
+
 
         if method == 'simple':
             for i in range(2, len(self.renko_directions)):
@@ -299,8 +447,16 @@ class renko:
                 score = np.log(score + 1) * np.log(price_ratio)
             else:
                 score = -1.0
-            return {'balance': balance, 'sign_changes:': sign_changes,
-                    'price_ratio': price_ratio, 'score': score}
+            return {'balance': balance,
+                    'sign_changes:': sign_changes,
+                    'price_ratio': price_ratio,
+                    'score': score,
+                    'largest_drawdown': self.largest_drawdown,
+                    'price dipped one brick size but trend continued up/down': (upward_direction_price_retraced_but_trend_continued_stat, downward_direction_price_retraced_but_trend_continued_stat),
+                    'uptrend price dipped down then up after first brick in trend and trend continued': uptrend_after_first_brick_price_retraced_but_trend_continued,
+                    'uptrend price dipped up then up down first brick in trend and trend continued': downtrend_after_first_brick_price_retraced_but_trend_continued,
+                    'trend_continued after sign change': trend_continued_after_sign_change/sign_changes,
+                    }
 
     def get_renko_prices(self):
         return self.renko_prices
@@ -313,6 +469,11 @@ class renko:
 
     def get_renko_directions(self):
         return self.renko_directions
+
+    def plot_balance(self):
+        plt.plot(self.capital_history)
+        plt.ylabel('balance')
+        plt.show()
 
     def plot_renko(self, col_up='g', col_down='r'):
         fig, ax = plt.subplots(1, figsize=(20, 10))
@@ -333,7 +494,7 @@ class renko:
             x = i
             y = self.renko_prices[i] - \
                 self.brick_size if self.renko_directions[i] == 1 else self.renko_prices[i]
-            height = self.brick_size
+            height = self.brick_sizes[i]
 
             # Draw bar with params
             ax.add_patch(
