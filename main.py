@@ -65,6 +65,5 @@ if __name__ == '__main__':
             time.sleep(2)
             last_candle = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]
             if last_candle["startTime"] > last_complete_candle_time:
-                  log.info(f'new candle: close price={last_candle["close"]} start time={last_candle["startTime"]}')
                   last_complete_candle_time = last_candle["startTime"]
                   renko_obj.on_new_candle(last_candle)
