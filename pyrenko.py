@@ -46,6 +46,7 @@ class renko:
         #self.current_capital = 1000
         self.current_capital = self.ftx.get_usd_balance()
         self.atr = None
+        self.atr_stop_loss = None
         
         # trend following params
         self.position_data = {"trade_direction": "", "prices_opened": []}
@@ -67,7 +68,7 @@ class renko:
         self.renko_prices.append(float(self.close_price.iloc[-1, 4]))
         self.renko_directions.append(0)
 
-        log.info(f'initial renko price: {self.renko_prices[-1]}')
+        log.info(f'initial brick close: {self.renko_prices[-1]}')
 
     def calculate_optimal_brick_size(self):
         # self.last_recalculation_index = current_candle
@@ -127,6 +128,7 @@ class renko:
                                 size=size,
                                 type=ftx.limit,
                         )
+                    self.atr_stop_loss = renko_price - self.atr
                 else:
                     position_side = "short"
                     if not self.paper_mode:
@@ -137,7 +139,8 @@ class renko:
                                 size=size,
                                 type=ftx.limit,
                         )
-                log.info(f'new order: side={position_side} price={renko_price} size={size}')
+                    self.atr_stop_loss = renko_price + self.atr
+                log.info(f'new order: side={position_side} price={renko_price} size={size} atr_stop={self.atr_stop_loss}')
                 self.position_data["trade_direction"] = position_side
             self.position_data["prices_opened"].append(renko_price)
         else:
@@ -157,6 +160,7 @@ class renko:
         self.current_capital = self.ftx.get_usd_balance()
         log.info(f'balance: {self.current_capital} usd')
         self.capital_history.append(self.current_capital)
+        self.atr_stop_loss = None
         self.position_data["trade_direction"] = None
         self.position_data["prices_opened"] = []
         # recalculate brick size
@@ -271,17 +275,17 @@ class renko:
         # check stop conditions if in position
         if self.position_data["trade_direction"]:
             # atr stop loss rule
-            if self.atr:
-                if self.renko_directions[-1] > 0 and last_close_price < self.renko_prices[-1] - 0.75*self.atr:
-                    reason = f"stop loss: candle close below (last brick - 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr={self.atr}"
+            if self.atr_stop_loss:
+                if self.renko_directions[-1] > 0 and last_close_price < self.atr_stop_loss:
+                    reason = f"stop loss: candle close below (last brick - 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
-                        price=self.renko_prices[-1] - 0.75*atr)
-                elif self.renko_directions[-1] < 0 and last_close_price > self.renko_prices[-1] + 0.75*self.atr:
-                    reason = f"stop loss: candle close above (last brick + 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr={self.atr}"
+                        price=self.atr_stop_loss)
+                elif self.renko_directions[-1] < 0 and last_close_price > self.atr_stop_loss:
+                    reason = f"stop loss: candle close above (last brick + 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
-                        price=self.renko_prices[-1] + 0.75*atr)
+                        price=self.atr_stop_loss)
             
             # brick open stop loss rule
             if self.renko_directions[-1] > 0 and last_close_price < self.renko_prices[-1] - self.brick_size:
