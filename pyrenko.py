@@ -277,12 +277,12 @@ class renko:
             # atr stop loss rule
             if self.atr_stop_loss:
                 if self.renko_directions[-1] > 0 and last_close_price < self.atr_stop_loss:
-                    reason = f"stop loss: candle close below (last brick - 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
+                    reason = f"stop loss: candle close below (last brick - atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
                         price=self.atr_stop_loss)
                 elif self.renko_directions[-1] < 0 and last_close_price > self.atr_stop_loss:
-                    reason = f"stop loss: candle close above (last brick + 3/4*atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
+                    reason = f"stop loss: candle close above (last brick + atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
                         price=self.atr_stop_loss)
