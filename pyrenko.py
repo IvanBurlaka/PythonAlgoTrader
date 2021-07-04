@@ -116,12 +116,20 @@ class renko:
         renko_price = self.renko_prices[-1]
         if self.renko_directions[-1] != 0 and self.renko_directions[-2] == self.renko_directions[-1] and not self.is_multiple_bricks_in_opposite_direction:
             # direction matches previous, then open position in following direction
-            if not self.position_data["trade_direction"]:
+
+            #if not self.position_data["trade_direction"]:
+            
+            position = self.ftx.get_position(self.market)
+            open_orders = self.ftx.get_open_orders(self.market)
+            
+            if not open_orders and (not position or not position["size"]):
+                # if there's no position and no orders, create order to open position
                 size = self.current_capital/renko_price
+                placed_order = dict()
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
                     if not self.paper_mode:
-                        self.ftx.place_order(
+                        placed_order = self.ftx.place_order(
                                 market=self.market,
                                 side=ftx.buy,
                                 price=renko_price,
@@ -132,7 +140,7 @@ class renko:
                 else:
                     position_side = "short"
                     if not self.paper_mode:
-                        self.ftx.place_order(
+                        placed_order = self.ftx.place_order(
                                 market=self.market,
                                 side=ftx.sell,
                                 price=renko_price,
@@ -140,8 +148,30 @@ class renko:
                                 type=ftx.limit,
                         )
                     self.atr_stop_loss = renko_price + self.atr
-                log.info(f'new order: side={position_side} price={renko_price} size={size} atr_stop={self.atr_stop_loss}')
+                log.info(f'new order: side={position_side} price={renko_price} size={size} atr_stop={self.atr_stop_loss} id={placed_order["id"]}')
                 self.position_data["trade_direction"] = position_side
+            elif open_orders:
+                # if there's open order, modify the order for new brick price
+                if not self.paper_mode:
+                    if len(open_orders) != 1:
+                        log.error(f'modifying open order for new brick: too may open orders: {open_orders}')
+                        return
+                    order = open_orders[0]
+                    if order["status"] == "closed":
+                        log.warning(f'modifying open order for new brick: order is already closed: {order}')
+                        return
+                    try:
+                        modified_order = self.ftx.modify_order(order["id"], price=renko_price)
+                        if self.renko_directions[-1] == 1:
+                            self.atr_stop_loss = renko_price - self.atr
+                        else:
+                            self.atr_stop_loss = renko_price + self.atr
+                    except Exception as e:
+                        log.error(f"modifying open order for new brick: exception: {e}")
+                log.info(f'modified open order for new brick: side={modified_order["side"]} price={renko_price} size={modified_order["size"]} atr_stop={self.atr_stop_loss} id={modified_order["id"]}')
+            else:
+                # there's open position and no open orders, do nothing
+                pass
             self.position_data["prices_opened"].append(renko_price)
         else:
             # position direction has changed, close open order and calculate capital
@@ -227,7 +257,7 @@ class renko:
                             low=np.double(self.close_price.iloc[-15:, 3]),
                             close=np.double(self.close_price.iloc[-15:, 4]),
                             timeperiod=14)[-1]
-        log.info(f'new candle: close price={candle["close"]} start time={candle["startTime"]}, atr={self.atr}')
+        log.info(f'new candle: close price={candle["close"]} start time={candle["startTime"]}, atr={self.atr:.3f}')
         self.__renko_rule(self.close_price.iloc[-1, 4])
 
     def __renko_rule(self, last_close_price):
