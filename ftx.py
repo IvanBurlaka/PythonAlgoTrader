@@ -18,6 +18,9 @@ limit='limit'
 market='market'
 
 
+_REQUEST_TIMEOUT_SECONDS = 3
+
+
 class FtxClient:
     _ENDPOINT = 'https://ftx.com/api/'
 
@@ -51,7 +54,7 @@ class FtxClient:
             try:
                 request = Request(method, self._ENDPOINT + path, **kwargs)
                 self._sign_request(request)
-                response = self._session.send(request.prepare())
+                response = self._session.send(request.prepare(), timeout=_REQUEST_TIMEOUT_SECONDS)
                 return self._process_response(response)
             except Exception as e:
                 attempt += 1

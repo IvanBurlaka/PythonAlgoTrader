@@ -1,6 +1,7 @@
 ## [ftx]
 ### Added
 - Move open position order on next brick in the same direction if previous order was not filled.
+- Add timeouts to ftx calls.
 
 ## [0.2.0] - 2021-07-02
 ### Added
