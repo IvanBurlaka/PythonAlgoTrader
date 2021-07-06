@@ -42,12 +42,16 @@ if __name__ == '__main__':
 
       ftx = FtxClient(api_key, api_secret, subaccount_name)
 
-      log.info(f'market: {market}')
-      log.info(f'trailing history window: {trailing_history_window/hour} hours')
-      log.info(f'min recalculation period: {min_recalculation_period/hour} hours')
-      log.info(f'max position close time: {max_position_close_seconds} seconds')
-      log.info(f'initial balance: {ftx.get_usd_balance()} usd')
-      log.info(f'paper mode: {paper_mode}')
+      log.info(f'=================================================================')
+      log.info(f'                    (.)(.) sTaRtInG aLgO .i.                     ')
+      log.info(f'=================================================================')
+      log.info(f'                         market: {market}')
+      log.info(f'        trailing history window: {trailing_history_window/day} days')
+      log.info(f'       min recalculation period: {min_recalculation_period/day} days')
+      log.info(f'        max position close time: {max_position_close_seconds} seconds')
+      log.info(f'                initial balance: {ftx.get_usd_balance()} usd')
+      log.info(f'                     paper mode: {paper_mode}')
+      log.info(f'=================================================================')
 
       parser = argparse.ArgumentParser()
       parser.add_argument("--prices_file", help="File with prices", type=str, default='')
