@@ -113,7 +113,7 @@ class renko:
 
     def __trend_following_strategy(self):
         if self.renko_directions[-1] == 0:
-            log.info("waiting for confirmation brick in the same direction")
+            log.info("waiting for more bricks")
             return
 
         renko_price = self.renko_prices[-1]
@@ -177,9 +177,11 @@ class renko:
     
     def finish_iteration(self, reason: str, max_wait_seconds=0, price=0.):
         if not self.position_data["trade_direction"]:
-            log.info(f'closing position, waiting {max_wait_seconds} sec at price {price}: reason - {reason}')
-            if not self.paper_mode:
-                self.close_position(max_wait_seconds, price)
+            return
+
+        log.info(f'closing position, waiting {max_wait_seconds} sec at price {price}: reason - {reason}')
+        if not self.paper_mode:
+            self.close_position(max_wait_seconds, price)
         
         self.current_capital = self.ftx.get_usd_balance()
         log.info(f'balance: {self.current_capital} usd')
