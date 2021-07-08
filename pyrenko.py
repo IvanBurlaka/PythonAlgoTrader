@@ -174,6 +174,8 @@ class renko:
                 # there's open position and no open orders, do nothing
                 log.info('waiting for position close conditions')
             self.position_data["prices_opened"].append(renko_price)
+        else:
+            log.info('waiting for confirmation brick in the same direction')
     
     def finish_iteration(self, reason: str, max_wait_seconds=0, price=0.):
         if not self.position_data["trade_direction"]:
@@ -207,7 +209,7 @@ class renko:
         if max_wait_seconds == 0:
             log.info("market closing position")
             # market close position
-            self.ftx.place_order(
+            o = self.ftx.place_order(
                 market=self.market,
                 side=side,
                 price="0",
@@ -215,6 +217,7 @@ class renko:
                 size=size,
                 reduce_only=True,
             )
+            log.info(f"market fill: price={o['price']}, size={o['size']}, id={o['id']}")
         else:
             # try limit close position
             log.info("trying to limit close position")
@@ -300,12 +303,12 @@ class renko:
             # atr stop loss rule
             if self.atr_stop_loss:
                 if self.renko_directions[-1] > 0 and last_close_price < self.atr_stop_loss:
-                    reason = f"stop loss: candle close below (last brick - atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
+                    reason = f"stop loss: candle close below (entry brick - atr): candle close={last_close_price}, atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
                         price=self.atr_stop_loss)
                 elif self.renko_directions[-1] < 0 and last_close_price > self.atr_stop_loss:
-                    reason = f"stop loss: candle close above (last brick + atr): candle close={last_close_price}, last brick={self.renko_prices[-1]},  atr_stop={self.atr_stop_loss}"
+                    reason = f"stop loss: candle close above (entry brick + atr): candle close={last_close_price}, atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
                         self.max_position_close_seconds,
                         price=self.atr_stop_loss)

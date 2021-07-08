@@ -3,6 +3,7 @@
 - Move open position order on next brick in the same direction if previous order was not filled.
 - Add timeouts to ftx calls.
 - Remove multiple bricks flag - problematic and not needed with new stop rules.
+- Use 'total' USD balance instead of 'free'.
 
 ## [0.2.0] - 2021-07-02
 ### Added

@@ -18,7 +18,7 @@ limit='limit'
 market='market'
 
 
-_REQUEST_TIMEOUT_SECONDS = 3
+_REQUEST_TIMEOUT_SECONDS = 5
 
 
 class FtxClient:
@@ -102,7 +102,8 @@ class FtxClient:
         balances = self.get_balances()
         for b in balances:
             if b['coin'] == 'USD':
-                return b['free']
+                log.info(f'debug usd balance response: {b}')
+                return b['total']
         return 0
 
     def get_orderbook(self, market: str, depth: int = None) -> dict:
