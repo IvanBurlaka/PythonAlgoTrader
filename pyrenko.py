@@ -136,7 +136,8 @@ class renko:
             
             if not position or not position["size"]:
                 # if there's no position and no orders, open position
-                size = self.current_capital/last_close_price % self.size_increment
+                size = self.current_capital/last_close_price
+                size -= size % self.size_increment # adjust size to be multiple of size_increment
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
                     side = ftx.buy
@@ -305,7 +306,8 @@ class renko:
                 brick_price = self.renko_prices[-1] + 2 * self.brick_size * np.sign(gap_div)
                 self.renko_prices.append(brick_price)
                 self.renko_directions.append(np.sign(gap_div))
-                log.info(f'new brick: {brick_price}')
+                direction = "up" if self.renko_directions[-1] > 0 else "down"
+                log.info(f'new brick ({direction}): {brick_price}')
             # else:
             # num_new_bars = 0
 
@@ -315,7 +317,8 @@ class renko:
                     brick_price = self.renko_prices[-1] + self.brick_size * np.sign(gap_div)
                     self.renko_prices.append(brick_price)
                     self.renko_directions.append(np.sign(gap_div))
-                    log.info(f'new brick: {brick_price}')
+                    direction = "up" if self.renko_directions[-1] > 0 else "down"
+                    log.info(f'new brick ({direction}): {brick_price}')
                 self.__trend_following_strategy()
 
         # check stop conditions if in position
