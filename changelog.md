@@ -1,6 +1,7 @@
 ## [ftx]
 ### Added
 - Size increment awareness.
+- ATR stop multiplier.
 
 ### Changed
 - Open and close positions on candle closes that produce triggers (instead of brick edges).

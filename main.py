@@ -25,6 +25,7 @@ week = 7*day
 
 paper_mode = bool(os.getenv('PAPER_MODE', "True").upper() != "FALSE")
 limit_order_timeout_seconds = int(os.getenv('LIMIT_ORDER_TIMEOUT_SECONDS'))
+atr_stop_multiplier = float(os.getenv('ATR_STOP_MULTIPLIER'))
 trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW'))
 min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD'))
 
@@ -48,11 +49,19 @@ if __name__ == '__main__':
       log.info(f'        trailing history window: {trailing_history_window/day} days')
       log.info(f'       min recalculation period: {min_recalculation_period/day} days')
       log.info(f'            limit order timeout: {limit_order_timeout_seconds} seconds')
+      log.info(f'            atr stop multiplier: {atr_stop_multiplier}')
       log.info(f'                initial balance: {ftx.get_usd_balance()} usd')
       log.info(f'                     paper mode: {paper_mode}')
       log.info(f'=================================================================')
 
-      renko_obj = pyrenko.renko(paper_mode, ftx, market, trailing_history_window, min_recalculation_period, limit_order_timeout_seconds)
+      renko_obj = pyrenko.renko(
+            paper_mode,
+            ftx, market,
+            trailing_history_window,
+            min_recalculation_period,
+            limit_order_timeout_seconds,
+            atr_stop_multiplier
+      )
       
       if not paper_mode:
             log.info('closing position if it is open')

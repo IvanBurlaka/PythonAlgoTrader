@@ -34,11 +34,21 @@ def get_initial_history(market, minutes):
 
 
 class renko:
-    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, trailing_history_window, min_recalculation_period, limit_order_timeout_seconds):
+    def __init__(
+        self,
+        paper_mode: bool,
+        ftx: ftx.FtxClient,
+        market: str,
+        trailing_history_window: int,
+        min_recalculation_period: int,
+        limit_order_timeout_seconds: int,
+        atr_stop_multiplier: float
+    ):
         self.paper_mode = paper_mode
         self.market = market
         self.ftx = ftx
         self.limit_order_timeout_seconds = limit_order_timeout_seconds
+        self.atr_stop_multiplier = atr_stop_multiplier
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
@@ -130,11 +140,11 @@ class renko:
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
                     side = ftx.buy
-                    self.atr_stop_loss = last_close_price - self.atr
+                    self.atr_stop_loss = last_close_price - self.atr_stop_multiplier*self.atr
                 else:
                     position_side = "short"
                     side = ftx.sell
-                    self.atr_stop_loss = self.renko_prices[-1] + self.atr
+                    self.atr_stop_loss = self.renko_prices[-1] + self.atr_stop_multiplier*self.atr
                 self.start_iteration(side, size, self.limit_order_timeout_seconds, last_close_price)
                 self.position_data["trade_direction"] = position_side
             else:
