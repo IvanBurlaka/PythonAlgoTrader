@@ -1,9 +1,23 @@
+## [ftx]
+### Added
+- Size increment awareness.
+
+### Changed
+- Open and close positions on candle closes that produce triggers (instead of brick edges).
+- Use market order for opening position if limit order doesn't fill.
+
+### Removed
+- Unused code for prices from file.
+- Moving open position order on next brick in the same direction if previous order was not filled.
+
 ## [0.3.0]
 ### Added
 - Move open position order on next brick in the same direction if previous order was not filled.
 - Add timeouts to ftx calls.
-- Remove multiple bricks flag - problematic and not needed with new stop rules.
 - Use 'total' USD balance instead of 'free'.
+
+### Removed
+- Multiple bricks flag - problematic and not needed with new stop rules.
 
 ## [0.2.0] - 2021-07-02
 ### Added

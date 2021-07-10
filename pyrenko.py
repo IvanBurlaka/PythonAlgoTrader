@@ -34,17 +34,18 @@ def get_initial_history(market, minutes):
 
 
 class renko:
-    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, prices_file, trailing_history_window, min_recalculation_period, max_position_close_seconds):
+    def __init__(self, paper_mode: bool, ftx: ftx.FtxClient, market, trailing_history_window, min_recalculation_period, limit_order_timeout_seconds):
         self.paper_mode = paper_mode
         self.market = market
         self.ftx = ftx
-        self.max_position_close_seconds = max_position_close_seconds
+        self.limit_order_timeout_seconds = limit_order_timeout_seconds
         self.renko_prices = []
         self.renko_directions = []
         self.renko_prices_for_calculation = []
         self.renko_directions_for_calculation = []
         #self.current_capital = 1000
         self.current_capital = self.ftx.get_usd_balance()
+        self.size_increment = ftx.get_future(market)["sizeIncrement"]
         self.atr = None
         self.atr_stop_loss = None
         
@@ -53,7 +54,7 @@ class renko:
         self.profit = []
         self.capital_history = []
         # self.close_price = pd.DataFrame(read_close_prices_and_times(prices_file))
-        self.close_price = pd.DataFrame(get_initial_history(self.market, trailing_history_window))
+        self.candles = pd.DataFrame(get_initial_history(self.market, trailing_history_window))
         self.trailing_history_window = trailing_history_window
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
@@ -64,10 +65,11 @@ class renko:
         self.set_brick_size(auto=True)
 
         # Init by start values
-        self.renko_prices.append(float(self.close_price.iloc[-1, 4]))
+        self.renko_prices.append(float(self.candles.iloc[-1, 4]))
         self.renko_directions.append(0)
 
         log.info(f'initial brick close: {self.renko_prices[-1]}')
+        log.info(f"size increment: {self.size_increment}")
 
     def calculate_optimal_brick_size(self):
         # self.last_recalculation_index = current_candle
@@ -79,9 +81,9 @@ class renko:
 
         # Get ATR values (it needs to get boundaries)
         # Drop NaNs
-        atr = talib.ATR(high=np.double(self.close_price.iloc[-self.trailing_history_window:, 2]),
-                        low=np.double(self.close_price.iloc[-self.trailing_history_window:, 3]),
-                        close=np.double(self.close_price.iloc[-self.trailing_history_window:, 4]),
+        atr = talib.ATR(high=np.double(self.candles.iloc[-self.trailing_history_window:, 2]),
+                        low=np.double(self.candles.iloc[-self.trailing_history_window:, 3]),
+                        close=np.double(self.candles.iloc[-self.trailing_history_window:, 4]),
                         timeperiod=14)
         atr = atr[np.isnan(atr) == False]
 
@@ -91,7 +93,7 @@ class renko:
         candles_spread=0
         while candles_spread < self.number_of_candles_calculations:
             renko_values.append(opt.fminbound(lambda x: -evaluate_renko(brick=x,
-                                                       history=self.close_price.iloc[-self.trailing_history_window+candles_spread:, 4],
+                                                       history=self.candles.iloc[-self.trailing_history_window+candles_spread:, 4],
                                                        column_name='score'),
                              np.min(atr),
                              np.max(atr),
@@ -116,68 +118,78 @@ class renko:
             log.info("waiting for more bricks")
             return
 
-        renko_price = self.renko_prices[-1]
+        last_close_price = self.candles.iloc[-1, 4]
 
         if self.renko_directions[-2] == self.renko_directions[-1]:
             # direction matches previous, then open position in following direction
             position = self.ftx.get_position(self.market)
-            open_orders = self.ftx.get_open_orders(self.market)
             
-            if not open_orders and (not position or not position["size"]):
-                # if there's no position and no orders, create order to open position
-                size = self.current_capital/renko_price
-                placed_order = dict()
+            if not position or not position["size"]:
+                # if there's no position and no orders, open position
+                size = self.current_capital/last_close_price % self.size_increment
                 if self.renko_directions[-1] == 1:
                     position_side = "long"
-                    if not self.paper_mode:
-                        placed_order = self.ftx.place_order(
-                                market=self.market,
-                                side=ftx.buy,
-                                price=renko_price,
-                                size=size,
-                                type=ftx.limit,
-                        )
-                    self.atr_stop_loss = renko_price - self.atr
+                    side = ftx.buy
+                    self.atr_stop_loss = last_close_price - self.atr
                 else:
                     position_side = "short"
-                    if not self.paper_mode:
-                        placed_order = self.ftx.place_order(
-                                market=self.market,
-                                side=ftx.sell,
-                                price=renko_price,
-                                size=size,
-                                type=ftx.limit,
-                        )
-                    self.atr_stop_loss = renko_price + self.atr
-                log.info(f'new order: side={position_side} price={renko_price} size={size} atr_stop={self.atr_stop_loss} id={placed_order["id"]}')
+                    side = ftx.sell
+                    self.atr_stop_loss = self.renko_prices[-1] + self.atr
+                self.start_iteration(side, size, self.limit_order_timeout_seconds, last_close_price)
                 self.position_data["trade_direction"] = position_side
-            elif open_orders:
-                # if there's open order, modify the order for new brick price
-                if not self.paper_mode:
-                    if len(open_orders) != 1:
-                        log.error(f'modifying open order for new brick: too may open orders: {open_orders}')
-                        return
-                    order = open_orders[0]
-                    if order["status"] == "closed":
-                        log.warning(f'modifying open order for new brick: order is already closed: {order}')
-                        return
-                    try:
-                        modified_order = self.ftx.modify_order(order["id"], price=renko_price)
-                        if self.renko_directions[-1] == 1:
-                            self.atr_stop_loss = renko_price - self.atr
-                        else:
-                            self.atr_stop_loss = renko_price + self.atr
-                    except Exception as e:
-                        log.error(f"modifying open order for new brick: exception: {e}")
-                log.info(f'modified open order for new brick: side={modified_order["side"]} price={renko_price} size={modified_order["size"]} atr_stop={self.atr_stop_loss} id={modified_order["id"]}')
             else:
-                # there's open position and no open orders, do nothing
+                # there's open position, do nothing
                 log.info('waiting for position close conditions')
-            self.position_data["prices_opened"].append(renko_price)
+            self.position_data["prices_opened"].append(last_close_price)
         else:
             log.info('waiting for confirmation brick in the same direction')
+
+    def start_iteration(self, side: str, size:float, max_wait_seconds:float=0., price:float=0.):
+        log.info(f'opening position, waiting {max_wait_seconds} sec at price {price}: side={side}, size={size}, atr_stop={self.atr_stop_loss}')
+        if not self.paper_mode:
+            self.open_position(side, max_wait_seconds, price)
+        
+    def open_position(self, side: str, size:float, max_wait_seconds:float=0., price:float=0.):
+        self.ftx.cancel_orders(market=self.market)
+
+        position = self.ftx.get_position(self.market)
+        if position["side"] != side:
+            log.error(f"opening position: wrong open position side: want side={side}, open side={position['side']}, size={position['size']}")
+        
+        opened_size = position["size"] if position else 0. # note: position["size"] is absolute value
+        remaining_size = size - opened_size
+
+        # opened_size is a subject to size_increment for the market
+        # so it can be slightly different from wanted size
+        if remaining_size < self.size_increment:
+            log.info("position opened")
+            return
+
+        if max_wait_seconds == 0:
+            # market close position
+            o = self.ftx.place_order(
+                market=self.market,
+                side=side,
+                price="0",
+                type=ftx.market,
+                size=remaining_size
+            )
+            log.info(f"opening position: market fill: price={o['price']}, size={o['size']}, id={o['id']}")
+        else:
+            # try limit open position
+            o = self.ftx.place_order(
+                market=self.market,
+                side=side,
+                price=price,
+                type=ftx.limit,
+                size=size
+            )
+            log.info(f"opening position: waiting for limit order fill: price={o['price']}, size={o['size']}, id={o['id']}")
+            time.sleep(max_wait_seconds)
+            # ensure market open of position if it's still pending
+            self.open_position(size, side, max_wait_seconds=0.)
     
-    def finish_iteration(self, reason: str, max_wait_seconds=0, price=0.):
+    def finish_iteration(self, reason: str, max_wait_seconds:float=0., price:float=0.):
         if not self.position_data["trade_direction"]:
             return
 
@@ -195,7 +207,7 @@ class renko:
         if self.candles_since_recalculation > self.min_recalculation_period:
             self.brick_size = self.calculate_optimal_brick_size()
     
-    def close_position(self, max_wait_seconds=0, price=0.):
+    def close_position(self, max_wait_seconds:float=0., price:float=0.):
         self.ftx.cancel_orders(market=self.market)
 
         position = self.ftx.get_position(self.market)
@@ -207,7 +219,6 @@ class renko:
         side = ftx.sell if position["side"] == ftx.buy else ftx.buy
 
         if max_wait_seconds == 0:
-            log.info("market closing position")
             # market close position
             o = self.ftx.place_order(
                 market=self.market,
@@ -217,19 +228,18 @@ class renko:
                 size=size,
                 reduce_only=True,
             )
-            log.info(f"market fill: price={o['price']}, size={o['size']}, id={o['id']}")
+            log.info(f"closing position: market fill: price={o['price']}, size={o['size']}, id={o['id']}")
         else:
             # try limit close position
-            log.info("trying to limit close position")
-            order_type = ftx.limit
-            self.ftx.place_order(
+            o = self.ftx.place_order(
                 market=self.market,
                 side=side,
                 price=price,
-                type=order_type,
+                type=ftx.limit,
                 size=size,
                 reduce_only=True,
             )
+            log.info(f"closing position: waiting for limit order fill: price={o['price']}, size={o['size']}, id={o['id']}")
             time.sleep(max_wait_seconds)
             # ensure market close of position if it's still open
             self.close_position(0)
@@ -237,7 +247,7 @@ class renko:
     def on_new_candle(self, candle):
         # convert ftx candle to binance candle bc close_price is binance format
         self.candles_since_recalculation += 1
-        self.close_price = self.close_price.append([[
+        self.candles = self.candles.append([[
             candle['time'],
             candle['open'],
             candle['high'],
@@ -251,12 +261,12 @@ class renko:
             0,
             0,
         ]], ignore_index=True)
-        self.atr = talib.ATR(high=np.double(self.close_price.iloc[-15:, 2]),
-                            low=np.double(self.close_price.iloc[-15:, 3]),
-                            close=np.double(self.close_price.iloc[-15:, 4]),
+        self.atr = talib.ATR(high=np.double(self.candles.iloc[-15:, 2]),
+                            low=np.double(self.candles.iloc[-15:, 3]),
+                            close=np.double(self.candles.iloc[-15:, 4]),
                             timeperiod=14)[-1]
         log.info(f'new candle: close price={candle["close"]} start time={candle["startTime"]}, atr={self.atr:.3f}')
-        self.__renko_rule(self.close_price.iloc[-1, 4])
+        self.__renko_rule(self.candles.iloc[-1, 4])
 
     def __renko_rule(self, last_close_price):
         #log.info(f'running renko rule on last price: {last_price}')
@@ -305,25 +315,25 @@ class renko:
                 if self.renko_directions[-1] > 0 and last_close_price < self.atr_stop_loss:
                     reason = f"stop loss: candle close below (entry brick - atr): candle close={last_close_price}, atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
-                        self.max_position_close_seconds,
-                        price=self.atr_stop_loss)
+                        self.limit_order_timeout_seconds,
+                        price=last_close_price)
                 elif self.renko_directions[-1] < 0 and last_close_price > self.atr_stop_loss:
                     reason = f"stop loss: candle close above (entry brick + atr): candle close={last_close_price}, atr_stop={self.atr_stop_loss}"
                     self.finish_iteration(reason,
-                        self.max_position_close_seconds,
-                        price=self.atr_stop_loss)
+                        self.limit_order_timeout_seconds,
+                        price=last_close_price)
             
             # brick open stop loss rule
             if self.renko_directions[-1] > 0 and last_close_price < self.renko_prices[-1] - self.brick_size:
                 reason = f"stop loss: candle close below last brick open: candle close={last_close_price} last brick open={self.renko_prices[-1] - self.brick_size}"
                 self.finish_iteration(reason,
-                    self.max_position_close_seconds,
-                    price=self.renko_prices[-1] - self.brick_size)
+                    self.limit_order_timeout_seconds,
+                    price=last_close_price)
             elif self.renko_directions[-1] < 0 and last_close_price > self.renko_prices[-1] + self.brick_size:
                 reason = f"stop loss: candle close above last brick open: candle close={last_close_price} last brick open={self.renko_prices[-1] + self.brick_size}"
                 self.finish_iteration(reason,
-                    self.max_position_close_seconds,
-                    price=self.renko_prices[-1] + self.brick_size)
+                    self.limit_order_timeout_seconds,
+                    price=last_close_price)
 
         return num_new_bars
 

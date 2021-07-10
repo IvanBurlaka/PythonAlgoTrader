@@ -85,6 +85,9 @@ class FtxClient:
             if not data['success']:
                 raise Exception(data['error'])
             return data['result']
+    
+    def get_future(self, market: str) -> dict:
+        return self._get(f'futures/{market}')
 
     def list_futures(self) -> List[dict]:
         return self._get('futures')
