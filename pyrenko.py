@@ -164,8 +164,8 @@ class renko:
         self.ftx.cancel_orders(market=self.market)
 
         position = self.ftx.get_position(self.market)
-        if position and position["side"] != side:
-            log.error(f"opening position: wrong open position side: want side={side}, open side={position['side']}, size={position['size']}")
+        if position and position["size"] > 0 and position["side"] != side:
+            log.error(f"opening position: unexpected open position: open side={position['side']}, open size={position['size']}, want side={side}")
         
         opened_size = position["size"] if position else 0. # note: position["size"] is absolute value
         remaining_size = size - opened_size
