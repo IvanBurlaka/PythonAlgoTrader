@@ -105,7 +105,6 @@ class FtxClient:
         balances = self.get_balances()
         for b in balances:
             if b['coin'] == 'USD':
-                log.info(f'debug usd balance response: {b}')
                 return b['total']
         return 0
 
