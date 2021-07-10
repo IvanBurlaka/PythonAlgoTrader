@@ -146,7 +146,7 @@ class renko:
                     position_side = "short"
                     side = ftx.sell
                     self.atr_stop_loss = self.renko_prices[-1] + self.atr_stop_multiplier*self.atr
-                self.start_iteration(side, size, self.limit_order_timeout_seconds, last_close_price)
+                self.start_iteration(side=side, size=size, max_wait_seconds=self.limit_order_timeout_seconds, price=last_close_price)
                 self.position_data["trade_direction"] = position_side
             else:
                 # there's open position, do nothing
@@ -158,7 +158,7 @@ class renko:
     def start_iteration(self, side: str, size:float, max_wait_seconds:float=0., price:float=0.):
         log.info(f'opening position, waiting {max_wait_seconds} sec at price {price}: side={side}, size={size}, atr_stop={self.atr_stop_loss}')
         if not self.paper_mode:
-            self.open_position(side, max_wait_seconds, price)
+            self.open_position(side=side, size=size, max_wait_seconds=max_wait_seconds, price=price)
         
     def open_position(self, side: str, size:float, max_wait_seconds:float=0., price:float=0.):
         self.ftx.cancel_orders(market=self.market)
@@ -187,7 +187,7 @@ class renko:
             )
             log.info(f"opening position: market fill: price={o['price']}, size={o['size']}, id={o['id']}")
         else:
-            # try limit open position
+            # try to limit open position
             o = self.ftx.place_order(
                 market=self.market,
                 side=side,
@@ -198,7 +198,7 @@ class renko:
             log.info(f"opening position: waiting for limit order fill: price={o['price']}, size={o['size']}, id={o['id']}")
             time.sleep(max_wait_seconds)
             # ensure market open of position if it's still pending
-            self.open_position(size, side, max_wait_seconds=0.)
+            self.open_position(side=side, size=size, max_wait_seconds=0.)
     
     def finish_iteration(self, reason: str, max_wait_seconds:float=0., price:float=0.):
         if not self.position_data["trade_direction"]:
@@ -241,7 +241,7 @@ class renko:
             )
             log.info(f"closing position: market fill: price={o['price']}, size={o['size']}, id={o['id']}")
         else:
-            # try limit close position
+            # try to limit close position
             o = self.ftx.place_order(
                 market=self.market,
                 side=side,
