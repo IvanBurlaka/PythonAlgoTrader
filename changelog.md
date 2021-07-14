@@ -1,3 +1,13 @@
+## [ftx]
+### Added
+- Stop loss if candle closes below brick price that triggered position opening.
+
+### Changed
+- Open and close positions on brick boundaries (instead of candle closes).
+
+### Removed
+- ATR stop loss.
+
 ## [0.4.0]
 ### Added
 - Size increment awareness.
