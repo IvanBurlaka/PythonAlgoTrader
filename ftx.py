@@ -99,7 +99,7 @@ class FtxClient:
         balances = self.get_balances()
         for b in balances:
             if b['coin'] == 'USD':
-                return b['free']
+                return b['total']
         return 0
 
     def get_orderbook(self, market: str, depth: int = None) -> dict:
