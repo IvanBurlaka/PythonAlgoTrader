@@ -1,4 +1,4 @@
-## [ftx]
+## [0.4.0]
 ### Added
 - Size increment awareness.
 - ATR stop multiplier.
