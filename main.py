@@ -60,7 +60,7 @@ if __name__ == '__main__':
             renko_obj.close_position()
 
       five_minutes = 5*60
-      last_complete_candle_time = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]["startTime"]
+      last_complete_candle_time = ftx.get_historical_prices(market, resolution, start_time=now()-five_minutes)[-2]["startTime"]
       while True:
             time.sleep(2)
             last_candle = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]

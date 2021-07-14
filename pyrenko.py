@@ -12,25 +12,48 @@ import pandas as pd
 log = logging.getLogger(__package__)
 
 
-def get_initial_history(market, minutes):
-    # from binance, bc ftx stupid no has data
-    from datetime import date, timedelta
+def get_initial_history(ftx: ftx.FtxClient, market, minutes):
+    if minutes < 1500:
+        log.info("getting history from ftx")
+        resolution = '60' # 1 minute on ftx
+        candles = ftx.get_historical_prices(market=market, resolution=resolution)[:-1]
+        log.info(f'history length: {len(candles)}')
+        log.info(f'last candle in history: {candles[-1]}')
+        return [
+            [
+                candle['time'],
+                candle['open'],
+                candle['high'],
+                candle['low'],
+                candle['close'],
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ] for candle in candles]
+    else:
+        # from binance, bc ftx stupid no has data
+        from datetime import date, timedelta
+        log.info("getting history from binance")
 
-    market = market.replace('-PERP', 'USDT')
-    days = int(minutes/24/60)+1
-    today = date.today()
+        market = market.replace('-PERP', 'USDT')
+        days = int(minutes/24/60)+1
+        today = date.today()
 
-    start = (today - timedelta(days)).strftime("%Y/%m/%d")
-    end = (today + timedelta(days=1)).strftime("%Y/%m/%d")
+        start = (today - timedelta(days)).strftime("%Y/%m/%d")
+        end = (today + timedelta(days=1)).strftime("%Y/%m/%d")
 
-    log.info(f'history start: {start}')
-    log.info(f'history end: {end}')
+        log.info(f'history start: {start}')
+        log.info(f'history end: {end}')
 
-    history = get_close_prices_and_times(market, start, end, '1m')
-    log.info(f'history length: {len(history)}')
-    log.info(f'last candle in history: {history[-1]}')
+        history = get_close_prices_and_times(market, start, end, '1m')
+        log.info(f'history length: {len(history)}')
+        log.info(f'last candle in history: {history[-1]}')
 
-    return history
+        return history
 
 
 class renko:
@@ -51,7 +74,7 @@ class renko:
         self.profit = []
         self.capital_history = []
         # self.close_price = pd.DataFrame(read_close_prices_and_times(prices_file))
-        self.close_price = pd.DataFrame(get_initial_history(self.market, trailing_history_window))
+        self.close_price = pd.DataFrame(get_initial_history(self.ftx, self.market, trailing_history_window))
         self.trailing_history_window = trailing_history_window
         self.min_recalculation_period = min_recalculation_period
         self.last_recalculation_index = 0
