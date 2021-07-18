@@ -139,7 +139,7 @@ class renko:
         if self.is_multiple_bricks_in_opposite_direction or self.renko_directions[-2] != self.renko_directions[-1]:
             # position direction has changed, close open order and calculate capital
             self.finish_iteration(
-                reason="renko trend direction changed",
+                reason=f"renko trend direction changed (multiple_in_opposite={self.is_multiple_bricks_in_opposite_direction}, last 3 directions={self.renko_directions[-3:]}",
                 max_wait_seconds=self.max_position_close_seconds,
                 price=renko_price
             )
@@ -176,15 +176,16 @@ class renko:
     def finish_iteration(self, reason: str, max_wait_seconds:float=0., price:float=0.):
         if not self.position_data["trade_direction"]:
             log.info("finishing iteration: nothing to do")
-            return
+        else:
+            log.info(f'closing position, waiting {max_wait_seconds} sec at price {price}: reason - {reason}')
+            if not self.paper_mode:
+                self.close_position(max_wait_seconds)
 
-        log.info(f'closing position, waiting {max_wait_seconds} sec at price {price}: reason - {reason}')
-        if not self.paper_mode:
-            self.close_position(max_wait_seconds)
         self.current_capital = self.ftx.get_usd_balance()
         log.info(f'balance: {self.current_capital} usd')
         self.capital_history.append(self.current_capital)
         self.position_trigger_brick_price = None
+        self.is_multiple_bricks_in_opposite_direction = False
         self.position_data["trade_direction"] = None
         self.position_data["prices_opened"] = []
         # recalculate brick size
