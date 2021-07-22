@@ -66,23 +66,30 @@ if __name__ == '__main__':
                   self._ftxws = ftxws
                   self._market = market
             
-            def _upd_current_position(self):
+            # def _upd_current_position(self):
+            #       current_position = ftx.get_position(self._market)
+            #       self._current_position = current_position["size"] if current_position else 0.
+            #       if current_position and current_position["side"] == "sell":
+            #             self._current_position = -self._current_position
+            #       log.info(f'current position={self._current_position} want_position={self._want_position}')
+            #       if self._current_position == self._want_position:
+            #             self._done = True
+            
+            def execute(self, position: float, timeout_seconds: float):
+                  self._done = False
+                  self._order = None
+                  self._timeout = time.time() + timeout_seconds
+                  self._want_position = position
                   current_position = ftx.get_position(self._market)
                   self._current_position = current_position["size"] if current_position else 0.
                   if current_position and current_position["side"] == "sell":
                         self._current_position = -self._current_position
-                  log.info(f'current position={self._current_position} want_position={self._want_position}')
-                  if self._current_position == self._want_position:
-                        self._done = True
-            
-            def execute(self, position: float, timeout_seconds: float):
-                  self._done = False
-                  self._timeout = time.time() + timeout_seconds
-                  self._want_position = position
-                  self._upd_current_position()
                   if self._want_position == self._current_position:
                         log.info("nothing to do")
                         return
+                  
+                  self._fees = 0.
+                  self._fills = []
 
                   self._bid, self._ask = 0., 0.
 
@@ -95,10 +102,10 @@ if __name__ == '__main__':
                   # wait for fulfillment
                   while True:
                         if self._done:
-                              log.info("position filled!")
+                              log.info(f"filled position={self._current_position}, average price={self._average_fill_price()}, fee={self._fees}")
                               break
                         if self._is_timeout():
-                              log.info("timeout!")
+                              log.info(f"timeout, wanted position={self._want_position}, got position={self._current_position}, average price={self._average_fill_price()}, fee={self._fees}")
                               break
                         time.sleep(0.1)
                   
@@ -122,59 +129,110 @@ if __name__ == '__main__':
                   if self._done:
                         return
 
-                  min_change = data['ask']/1500 # TODO
+                  price_step = 0.01 # TODO
+                  min_change = data['ask']/1500 + price_step # TODO
 
                   # TODO: price increment!
                   if self._longing() and self._bid != data['bid']:
-                        if abs(self._bid - data['bid']) < min_change:
+                        if self._order and abs(self._bid - data['bid']) < min_change:
                               return
                         
                         log.info(f'bid changed: bid={data["bid"]} min_change={min_change:.4f}')
                         self._bid = data['bid']
-                        self._ftx.cancel_orders(self._market)
-                        self._upd_current_position() # TODO: can be done in fills subscription
-                        size = self._want_position - self._current_position
-                        if size <= 0:
-                              return
-                        price = self._bid + 0.01
-                        log.info(f'long price={price} size={size} current_position={self._current_position} want_position={self._want_position}')
-                        self._ftx.place_order(
-                              market=self._market,
-                              side='buy',
-                              size=size,
-                              price=price,
-                              type='limit',
-                              post_only=True,
-                              reduce_only=self._is_closing()
-                        )
+
+                        if not self._order:
+                              size = self._want_position - self._current_position
+                              if size <= 0:
+                                    return
+                              price = self._bid + price_step
+                              log.info(f'long price={price} size={size} current_position={self._current_position} want_position={self._want_position}')
+                              self._order = self._ftx.place_order(
+                                    market=self._market,
+                                    side='buy',
+                                    size=size,
+                                    price=price,
+                                    type='limit',
+                                    post_only=True,
+                                    reduce_only=self._is_closing()
+                              )
+                              if ftx.get_order_status(self._order["id"])["status"] == "closed":
+                                    log.info("new order canceled, will retry")
+                                    self._order = None
+                                    time.sleep(0.1) # let position update if it was filled
+                              else:
+                                    log.info(f"new order: {self._order}")
+                        else:
+                              size = self._want_position - self._current_position
+                              if size <= 0:
+                                    return
+                              price = self._bid + price_step
+                              self._order = self._ftx.modify_order(self._order["id"], price=price, size=size)
+                              log.info(f"modified order: {self._order}")
+                              
                   if self._shorting() and self._ask != data['ask']:
-                        if abs(self._ask - data['ask']) < min_change:
+                        if self._order and abs(self._ask - data['ask']) < min_change:
                               return
 
                         log.info(f'ask changed: ask={data["ask"]} min_change={min_change:.4f}')
                         self._ask = data['ask']
-                        self._ftx.cancel_orders(self._market)
-                        self._upd_current_position() # TODO: can be done in fills subscription
-                        size =  abs(self._current_position - self._want_position)
-                        if size <= 0:
-                              return
-                        price = self._ask - 0.01
-                        log.info(f'short price={price} size={size} current_position={self._current_position} want_position={self._want_position}')
-                        resp = self._ftx.place_order(
-                              market=self._market,
-                              side='sell',
-                              size=size,
-                              price=price,
-                              type='limit',
-                              post_only=True,
-                              reduce_only=self._is_closing()
-                        )
-                        log.info(f'short response: {resp}')
+
+                        if not self._order:
+                              size =  abs(self._current_position - self._want_position)
+                              if size <= 0:
+                                    return
+                              price = self._ask - price_step
+                              log.info(f'short price={price} size={size} current_position={self._current_position} want_position={self._want_position}')
+                              self._order = self._ftx.place_order(
+                                    market=self._market,
+                                    side='sell',
+                                    size=size,
+                                    price=price,
+                                    type='limit',
+                                    post_only=True,
+                                    reduce_only=self._is_closing()
+                              )
+                              if ftx.get_order_status(self._order["id"])["status"] == "closed":
+                                    log.info("new order canceled, will retry")
+                                    self._order = None
+                                    time.sleep(0.1) # let position update if it was filled
+                              else:
+                                    log.info(f"new order: {self._order}")
+                        else:
+                              size =  abs(self._current_position - self._want_position)
+                              if size <= 0:
+                                    return
+                              price = self._ask - price_step
+                              self._order = self._ftx.modify_order(self._order["id"], price=price, size=size)
+                              log.info(f"modified order: {self._order}")
             
             def _on_fill(self, data):
+                  if data["market"] != self._market:
+                        log.info(f"ignoring fill: {data}")
+                        return
+
                   log.info(f'new fill: {data}')
-                  # TODO: filter by market!!!
-                  self._upd_current_position()
+                  size, side = data["size"], data["side"]
+                  price, fee = data["price"], data["fee"]
+
+                  self._fills.append((size, price))
+                  self._fees += fee
+
+                  self._current_position += size if side == "buy" else -size
+                  log.info(f'current position={self._current_position} want_position={self._want_position} done={self._done}')
+                  
+                  self._done = self._current_position == self._want_position
+            
+            def _average_fill_price(self):
+                  if not self._fills:
+                        return 0.
+
+                  total_price, total_size = 0., 0.
+                  for size, price in self._fills:
+                        total_price += price*size
+                        total_size += size
+                  
+                  return total_price/total_size
+
 
       from ftx_ws import FtxWebsocketClient
 

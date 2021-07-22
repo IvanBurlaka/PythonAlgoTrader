@@ -119,6 +119,9 @@ class FtxClient:
 
     def get_open_orders(self, market: str = None) -> List[dict]:
         return self._get(f'orders', {'market': market})
+
+    def get_order_status(self, id: str) -> List[dict]:
+        return self._get(f'orders/{id}')
     
     def get_order_history(self, market: str = None, side: str = None, order_type: str = None, start_time: float = None, end_time: float = None) -> List[dict]:
         return self._get(f'orders/history', {'market': market, 'side': side, 'orderType': order_type, 'start_time': start_time, 'end_time': end_time})
@@ -133,7 +136,7 @@ class FtxClient:
     ) -> dict:
         assert (existing_order_id is None) ^ (existing_client_order_id is None), \
             'Must supply exactly one ID for the order to modify'
-        assert (price is None) or (size is None), 'Must modify price or size of order'
+        assert (price is not None) or (size is not None), 'Must modify price or size of order'
         path = f'orders/{existing_order_id}/modify' if existing_order_id is not None else \
             f'orders/by_client_id/{existing_client_order_id}/modify'
         return self._post(path, {
