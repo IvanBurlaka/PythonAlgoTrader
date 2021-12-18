@@ -110,6 +110,27 @@ class renko:
             self.brick_size = brick_size
         return self.brick_size
 
+    def __macd_strategy(self, candle_index, last_price):
+        profit = 0
+        if self.position_data["trade_direction"] == 'long' and self.macd_hist[self.largest_trailing_history + candle_index] < 0 and self.macd_hist[self.largest_trailing_history + candle_index -1] > 0:
+            profit += (last_price) / self.position_data["prices_opened"][0] * (self.current_capital) - self.current_capital*1.0002
+            if profit != 0:
+                self.current_capital += profit
+                self.capital_history.append(self.current_capital)
+                self.position_data["trade_direction"] = None
+                self.position_data["prices_opened"] = []
+            self.position_data["trade_direction"] == 'short'
+            self.position_data["prices_opened"].append(last_price)
+        elif self.position_data["trade_direction"] == 'short' and self.macd_hist[self.largest_trailing_history + candle_index] > 0 and self.macd_hist[self.largest_trailing_history + candle_index -1] < 0:
+            profit += (self.position_data["prices_opened"][0]) / last_price * (self.current_capital) - self.current_capital * 1.0002
+            if profit != 0:
+                self.current_capital += profit
+                self.capital_history.append(self.current_capital)
+                self.position_data["trade_direction"] = None
+                self.position_data["prices_opened"] = []
+            self.position_data["trade_direction"] == 'short'
+            self.position_data["prices_opened"].append(last_price)
+
     def __trend_following_strategy(self, candle_index, last_price, atr):
         renko_price = self.renko_prices[-1]
         prev_renko_price = self.renko_prices[-2]
@@ -176,7 +197,9 @@ class renko:
             # recalculate brick size
             if candle_index - self.last_recalculation_index > self.min_recalculation_period:
                 self.brick_size = self.calculate_optimal_brick_size(current_candle=candle_index+self.trailing_history_window, is_initial_calculation=False)
-            self.is_multiple_bricks_in_opposite_direction = False
+            if self.is_multiple_bricks_in_opposite_direction:
+                self.is_multiple_bricks_in_opposite_direction = False
+                self.__trend_following_strategy(candle_index, last_price, atr)
 
     def __renko_rule(self, last_price, candle_index):
         # Get the gap between two prices
@@ -202,7 +225,7 @@ class renko:
         renko_price = self.renko_prices[-1]
         if self.position_data["trade_direction"]:
             profit = 0
-            if self.position_data["trade_direction"] == 'long':
+            # if self.position_data["trade_direction"] == 'long':
                 # self.position_data["stop_loss"] = renko_price - self.brick_size
                 # if last_price <= self.position_data["stop_loss"]:
                 #     long_position_close_price = self.position_data["stop_loss"] if float(self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 3]) <= self.position_data["stop_loss"] else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
@@ -220,23 +243,23 @@ class renko:
                 #     self.positions_closed_by_stoploss +=1
                 #     self.stopped_bricks.append(len(self.renko_prices))
 
-                if last_price <= self.position_data['starting_stop_loss']:
-                    long_position_close_price = self.position_data["starting_stop_loss"] if float(self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 3]) <= self.position_data["starting_stop_loss"] else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
-                    if long_position_close_price == self.position_data["starting_stop_loss"]:
-                        self.stopped_on_edge+=1
-                    else:
-                        self.stopped_on_candle+=1
-
-                    for price in self.position_data["prices_opened"][:self.position_divider]:
-                        profit += (long_position_close_price) / price * (self.current_capital / self.position_divider) - self.current_capital / self.position_divider * 1
-                    self.current_capital += profit
-                    self.long_gains += profit
-                    self.position_data["trade_direction"] = None
-                    self.position_data["prices_opened"] = []
-                    self.capital_history.append(self.current_capital)
-                    self.positions_closed_by_stoploss += 1
-                    self.stopped_bricks.append(len(self.renko_prices))
-            else:
+                # if last_price <= self.position_data['starting_stop_loss']:
+                #     long_position_close_price = self.position_data["starting_stop_loss"] if float(self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 3]) <= self.position_data["starting_stop_loss"] else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
+                #     if long_position_close_price == self.position_data["starting_stop_loss"]:
+                #         self.stopped_on_edge+=1
+                #     else:
+                #         self.stopped_on_candle+=1
+                #
+                #     for price in self.position_data["prices_opened"][:self.position_divider]:
+                #         profit += (long_position_close_price) / price * (self.current_capital / self.position_divider) - self.current_capital / self.position_divider * 1
+                #     self.current_capital += profit
+                #     self.long_gains += profit
+                #     self.position_data["trade_direction"] = None
+                #     self.position_data["prices_opened"] = []
+                #     self.capital_history.append(self.current_capital)
+                #     self.positions_closed_by_stoploss += 1
+                #     self.stopped_bricks.append(len(self.renko_prices))
+            # else:
                 # self.position_data["stop_loss"] = renko_price + self.brick_size
                 # if last_price >= self.position_data["stop_loss"]:
                 #     short_position_close_price = (self.position_data["stop_loss"])  if float(self.close_price.iloc[(self.largest_trailing_history + candle_index + 1), 2]) >= (self.position_data["stop_loss"]) else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
@@ -253,21 +276,21 @@ class renko:
                 #     self.capital_history.append(self.current_capital)
                 #     self.positions_closed_by_stoploss+=1
                 #     self.stopped_bricks.append(len(self.renko_prices))
-                if last_price >= self.position_data['starting_stop_loss']:
-                    short_position_close_price = (self.position_data["starting_stop_loss"])  if float(self.close_price.iloc[(self.largest_trailing_history + candle_index + 1), 2]) >= (self.position_data["starting_stop_loss"]) else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
-                    if short_position_close_price == self.position_data["starting_stop_loss"]:
-                        self.stopped_on_edge+=1
-                    else:
-                        self.stopped_on_candle+=1
-                    for price in self.position_data["prices_opened"][:self.position_divider]:
-                        profit += price/(short_position_close_price) * (self.current_capital/self.position_divider) - self.current_capital/self.position_divider*1
-                    self.current_capital+=profit
-                    self.short_gains+=profit
-                    self.position_data["trade_direction"] = None
-                    self.position_data["prices_opened"] = []
-                    self.capital_history.append(self.current_capital)
-                    self.positions_closed_by_stoploss+=1
-                    self.stopped_bricks.append(len(self.renko_prices))
+                # if last_price >= self.position_data['starting_stop_loss']:
+                #     short_position_close_price = (self.position_data["starting_stop_loss"])  if float(self.close_price.iloc[(self.largest_trailing_history + candle_index + 1), 2]) >= (self.position_data["starting_stop_loss"]) else self.close_price.iloc[self.largest_trailing_history + candle_index + 1, 4]
+                #     if short_position_close_price == self.position_data["starting_stop_loss"]:
+                #         self.stopped_on_edge+=1
+                #     else:
+                #         self.stopped_on_candle+=1
+                #     for price in self.position_data["prices_opened"][:self.position_divider]:
+                #         profit += price/(short_position_close_price) * (self.current_capital/self.position_divider) - self.current_capital/self.position_divider*1
+                #     self.current_capital+=profit
+                #     self.short_gains+=profit
+                #     self.position_data["trade_direction"] = None
+                #     self.position_data["prices_opened"] = []
+                #     self.capital_history.append(self.current_capital)
+                #     self.positions_closed_by_stoploss+=1
+                #     self.stopped_bricks.append(len(self.renko_prices))
 
         if self.renko_directions[-1] == 1 and self.renko_directions[-2] == -1:
             if last_price < self.renko_prices[-1]:

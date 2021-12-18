@@ -25,7 +25,7 @@ if __name__ == '__main__':
 
     # print('optimal', optimal_brick_sfo)
 
-    hour = 60
+    hour = 24*60
     day = 24*hour
 
     time_increment = day
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     atr_multiples = [1,2,3,4,5,6,7,8,9]
     # while time_increment <= 14*day:
     for position_divider in position_dividers:
-        renko_obj = pyrenko.renko(trailing_history=1*day, largest_trailing_history=1*day, position_divider=1, atr_multiple=1, starting_atr_multiple=0)
+        renko_obj = pyrenko.renko(trailing_history=15*day, largest_trailing_history=15*day, position_divider=1, atr_multiple=1, starting_atr_multiple=0.1)
         print('Set brick size (manual mode): ',
         renko_obj.set_brick_size(auto=True, is_initial_calculation=True))
         renko_obj.build_history()
