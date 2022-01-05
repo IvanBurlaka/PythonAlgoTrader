@@ -23,9 +23,9 @@ hour = 60*minute
 day = 24*hour
 week = 7*day
 
-paper_mode = bool(os.getenv('PAPER_MODE', "True").upper() != "FALSE")
-limit_order_timeout_seconds = int(os.getenv('LIMIT_ORDER_TIMEOUT_SECONDS'))
-atr_stop_multiplier = float(os.getenv('ATR_STOP_MULTIPLIER'))
+paper_mode = True #bool(os.getenv('PAPER_MODE', "True").upper() != "FALSE")
+limit_order_timeout_seconds = 10 # int(os.getenv('LIMIT_ORDER_TIMEOUT_SECONDS'))
+atr_stop_multiplier = 1.0 # float(os.getenv('ATR_STOP_MULTIPLIER'))
 trailing_history_window = int(os.getenv('TRAILING_HISTORY_WINDOW'))
 min_recalculation_period = int(os.getenv('MIN_RECALCULATION_PERIOD'))
 
@@ -36,9 +36,9 @@ def now():
 if __name__ == '__main__':
       resolution = '60' # 1 minute on ftx
       market = os.environ['MARKET']
-      subaccount_name = os.environ['SUBACCOUNT_NAME']
-      api_key = os.environ['API_KEY']
-      api_secret = os.environ['API_SECRET']
+      subaccount_name = "" #os.environ['SUBACCOUNT_NAME']
+      api_key = "" #os.environ['API_KEY']
+      api_secret = "" #os.environ['API_SECRET']
 
       ftx = FtxClient(api_key, api_secret, subaccount_name)
 
@@ -48,10 +48,10 @@ if __name__ == '__main__':
       log.info(f'                         market: {market}')
       log.info(f'        trailing history window: {trailing_history_window/hour} hours')
       log.info(f'       min recalculation period: {min_recalculation_period/hour} hours')
-      log.info(f'            limit order timeout: {limit_order_timeout_seconds} seconds')
-      log.info(f'            atr stop multiplier: {atr_stop_multiplier}')
-      log.info(f'                initial balance: {ftx.get_usd_balance()} usd')
-      log.info(f'                     paper mode: {paper_mode}')
+    #   log.info(f'            limit order timeout: {limit_order_timeout_seconds} seconds')
+    #   log.info(f'            atr stop multiplier: {atr_stop_multiplier}')
+    #   log.info(f'                initial balance: {ftx.get_usd_balance()} usd')
+    #   log.info(f'                     paper mode: {paper_mode}')
       log.info(f'=================================================================')
 
       renko_obj = pyrenko.renko(
@@ -63,9 +63,9 @@ if __name__ == '__main__':
             atr_stop_multiplier
       )
       
-      if not paper_mode:
-            log.info('closing position if it is open')
-            renko_obj.close_position()
+    #   if not paper_mode:
+    #         log.info('closing position if it is open')
+    #         renko_obj.close_position()
 
       five_minutes = 5*60
       last_complete_candle_time = ftx.get_historical_prices(market, resolution, now()-five_minutes)[-2]["startTime"]
