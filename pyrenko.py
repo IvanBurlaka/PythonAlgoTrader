@@ -275,7 +275,7 @@ class renko:
                             low=np.double(self.candles.iloc[-15:, 3]),
                             close=np.double(self.candles.iloc[-15:, 4]),
                             timeperiod=14)[-1]
-        log.info(f'new candle: open={candle["open"]} high={candle["high"]} low={candle["low"]} close={candle["close"]} start time={candle["startTime"]}, atr={self.atr:.3f}')
+        log.info(f'new candle: open={candle["open"]} high={candle["high"]} low={candle["low"]} close={candle["close"]} mid={candle["low"]+(candle["high"]-candle["low"])/2} start time={candle["startTime"]}, atr={self.atr:.3f}')
         self.__renko_rule(self.candles.iloc[-1, 4])
 
     def __renko_rule(self, last_close_price):
